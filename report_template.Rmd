@@ -1,0 +1,324 @@
+---
+title: "Model Comparison Report"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    theme: flatly
+    self_contained: true
+  word_document:
+    toc: true
+    toc_depth: 3
+  pdf_document:
+    toc: true
+    toc_depth: 3
+    latex_engine: xelatex
+params:
+  raw_data:        NULL
+  roles:           NULL
+  col_types:       NULL
+  selected_models: NULL
+  anova_wide:      NULL
+  rmse_df:         NULL
+  vif_df:          NULL
+  lsmeans_list:    NULL
+  effects_list:    NULL
+  mc_results_list: NULL
+  mc_on:           FALSE
+  mc_terms:        NULL
+  mc_methods:      NULL
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo    = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  fig.width  = 7,
+  fig.height = 4.5,
+  dpi = 150
+)
+
+library(ggplot2)
+library(dplyr)
+library(flextable)
+
+# Convenience: safe flextable from data.frame
+ft <- function(df, caption = NULL) {
+  if (is.null(df) || nrow(df) == 0) {
+    return(flextable::flextable(data.frame(Note = "No data available.")))
+  }
+  tbl <- flextable::flextable(as.data.frame(df))
+  tbl <- flextable::autofit(tbl)
+  tbl <- flextable::theme_vanilla(tbl)
+  if (!is.null(caption)) {
+    tbl <- flextable::set_caption(tbl, caption)
+  }
+  tbl
+}
+
+model_colours <- function(n) {
+  palette <- c("#1f77b4", "#ff7f0e", "#2ca02c", "#d62728",
+               "#9467bd", "#8c564b", "#e377c2", "#7f7f7f",
+               "#bcbd22", "#17becf")
+  rep_len(palette, n)
+}
+```
+
+# 1. Raw Data Preview
+
+The first rows of the uploaded dataset are shown below.
+
+```{r raw-data}
+if (!is.null(params$raw_data) && nrow(params$raw_data) > 0) {
+  ft(head(params$raw_data, 20), caption = "Raw data (first 20 rows)")
+} else {
+  cat("No data available.")
+}
+```
+
+# 2. Column Role and Type Assignments
+
+```{r roles}
+if (!is.null(params$roles) && length(params$roles) > 0) {
+  role_df <- data.frame(
+    Column = names(params$roles),
+    Role   = unlist(params$roles),
+    stringsAsFactors = FALSE
+  )
+  if (!is.null(params$col_types) && length(params$col_types) > 0) {
+    type_df <- data.frame(
+      Column = names(params$col_types),
+      Type   = unlist(params$col_types),
+      stringsAsFactors = FALSE
+    )
+    role_df <- merge(role_df, type_df, by = "Column", all.x = TRUE)
+    role_df$Type[is.na(role_df$Type)] <- "\u2014"
+  }
+  ft(role_df, caption = "Column role and type assignments")
+} else {
+  cat("No role assignments available.")
+}
+```
+
+# 3. ANOVA Table (Type III)
+
+Models included in this report: `r paste(params$selected_models, collapse = ", ")`.
+
+```{r anova-table}
+if (!is.null(params$anova_wide) && nrow(params$anova_wide) > 0) {
+  num_cols <- sapply(params$anova_wide, is.numeric)
+  anova_fmt <- params$anova_wide
+  anova_fmt[num_cols] <- lapply(anova_fmt[num_cols], function(x) round(x, 4))
+  ft(anova_fmt, caption = "ANOVA Type III results (F values and p-values per model)")
+} else {
+  cat("No ANOVA results available.")
+}
+```
+
+*Note: p-values < 0.05 indicate statistically significant terms. Rows ordered: factors, blocks, covariates, residuals.*
+
+## 3.1 Model Fit Summary (RMSE / R²)
+
+```{r rmse-table}
+if (!is.null(params$rmse_df) && nrow(params$rmse_df) > 0) {
+  ft(params$rmse_df, caption = "Model fit statistics")
+} else {
+  cat("No model fit statistics available.")
+}
+```
+
+## 3.2 Collinearity (VIF)
+
+```{r vif-table}
+if (!is.null(params$vif_df) && nrow(params$vif_df) > 0) {
+  vif_tbl <- ft(params$vif_df, caption = "VIF (cross-model comparison)")
+  model_cols <- setdiff(names(params$vif_df), "Term")
+  for (mc in model_cols) {
+    vals <- params$vif_df[[mc]]
+    high_i   <- which(!is.na(vals) & vals > sqrt(5) & vals <= sqrt(10))
+    vhigh_i  <- which(!is.na(vals) & vals > sqrt(10))
+    if (length(high_i) > 0)
+      vif_tbl <- flextable::bg(vif_tbl, i = high_i, j = mc, bg = "#fff3cd")
+    if (length(vhigh_i) > 0)
+      vif_tbl <- flextable::bg(vif_tbl, i = vhigh_i, j = mc, bg = "#f8d7da")
+  }
+  vif_tbl
+} else {
+  cat("No VIF results available (models may have fewer than 2 predictors).")
+}
+```
+
+# 4. Effects Plots
+
+Factor terms show LS means (\u00b1 SE). Covariates show partial effects with 95% confidence bands. Both include adjusted data overlays where other model terms have been removed.
+
+```{r effects-factor-plots, results='asis', fig.width=7, fig.height=4}
+if (!is.null(params$lsmeans_list) && length(params$lsmeans_list) > 0) {
+  sec_idx <- 0L
+  for (spec in names(params$lsmeans_list)) {
+    ls_df <- params$lsmeans_list[[spec]]
+    if (is.null(ls_df) || nrow(ls_df) == 0) next
+
+    sec_idx <- sec_idx + 1L
+    cat(paste0("\n\n## 4.", sec_idx, " LS Means: ", spec, "\n\n"))
+
+    spec_terms <- strsplit(spec, ":")[[1]]
+    x_col <- spec_terms[1]
+    y_col <- if ("emmean" %in% names(ls_df)) "emmean" else names(ls_df)[2]
+    se_col <- if ("SE" %in% names(ls_df)) "SE" else NULL
+
+    colours <- model_colours(length(unique(ls_df$model)))
+
+    p <- ggplot(ls_df, aes_string(x = x_col, y = y_col,
+                                   colour = "model", group = "model")) +
+      geom_point(size = 3, position = position_dodge(0.3))
+
+    if (!is.null(se_col)) {
+      p <- p + geom_errorbar(
+        aes_string(ymin = paste0(y_col, " - ", se_col),
+                   ymax = paste0(y_col, " + ", se_col)),
+        width = 0.2, position = position_dodge(0.3)
+      )
+    }
+
+    p <- p +
+      scale_colour_manual(values = colours) +
+      labs(title = paste("LS Means \u2014", spec),
+           x = x_col, y = "LS Mean", colour = "Model") +
+      theme_minimal(base_size = 11)
+
+    print(p)
+    cat("\n\n")
+
+    # LS means table
+    cat("\n**LS Means values:**\n\n")
+    num_cols <- sapply(ls_df, is.numeric)
+    ls_fmt <- ls_df
+    ls_fmt[num_cols] <- lapply(ls_fmt[num_cols], function(x) round(x, 4))
+    print(ft(ls_fmt))
+    cat("\n\n")
+  }
+} else {
+  cat("No LS means results available.")
+}
+```
+
+```{r effects-cov-plots, results='asis', fig.width=7, fig.height=4}
+if (!is.null(params$effects_list) && length(params$effects_list) > 0) {
+  sec_base <- if (!is.null(params$lsmeans_list)) length(params$lsmeans_list) else 0L
+  for (i in seq_along(params$effects_list)) {
+    cov <- names(params$effects_list)[i]
+    eff_df <- params$effects_list[[cov]]
+    if (is.null(eff_df) || nrow(eff_df) == 0) next
+
+    cat(paste0("\n\n## 4.", sec_base + i,
+               " Partial Effect: ", cov, "\n\n"))
+
+    colours <- model_colours(length(unique(eff_df$model)))
+
+    p <- ggplot(eff_df, aes(x = x, y = fit, colour = model, fill = model)) +
+      geom_ribbon(aes(ymin = lwr, ymax = upr), alpha = 0.15, colour = NA) +
+      geom_line(linewidth = 1) +
+      scale_colour_manual(values = colours) +
+      scale_fill_manual(values = colours) +
+      labs(title = paste("Partial effect of", cov),
+           subtitle = "Other covariates at mean; factors at reference level",
+           x = cov, y = "Predicted response", colour = "Model") +
+      guides(fill = "none") +
+      theme_minimal(base_size = 11)
+
+    print(p)
+    cat("\n\n")
+  }
+} else {
+  cat("No covariate effects data available.")
+}
+```
+
+# 5. Multiple Comparisons
+
+```{r mc-section, results='asis', fig.width=7, fig.height=4}
+if (isTRUE(params$mc_on) &&
+    !is.null(params$mc_results_list) &&
+    length(params$mc_results_list) > 0) {
+
+  mc_keys <- names(params$mc_results_list)
+  sec_idx <- 0L
+
+  for (key in mc_keys) {
+    mc_df <- params$mc_results_list[[key]]
+    if (is.null(mc_df) || nrow(mc_df) == 0) next
+
+    sec_idx <- sec_idx + 1L
+    parts  <- strsplit(key, "__")[[1]]
+    mname  <- parts[1]
+    spec   <- if (length(parts) >= 2) parts[2] else "unknown"
+    method <- if (length(parts) >= 3) parts[3] else "unknown"
+
+    cat(paste0("\n\n## 5.", sec_idx, " Comparisons: ", spec, " \u2014 ", method,
+               " (", mname, ")\n\n"))
+
+    est_col <- if ("estimate"   %in% names(mc_df)) "estimate"   else names(mc_df)[2]
+    se_col  <- if ("SE"         %in% names(mc_df)) "SE"         else
+               if ("std.error"  %in% names(mc_df)) "std.error"  else NULL
+
+    if (!"contrast" %in% names(mc_df))
+      mc_df$contrast <- as.character(seq_len(nrow(mc_df)))
+
+    p <- ggplot(mc_df, aes_string(x = "contrast", y = est_col)) +
+      geom_point(size = 2.5, colour = "#1f77b4") +
+      geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50")
+
+    if (!is.null(se_col)) {
+      p <- p + geom_errorbar(
+        aes_string(ymin = paste0(est_col, " - 1.96*", se_col),
+                   ymax = paste0(est_col, " + 1.96*", se_col)),
+        width = 0.3, colour = "#1f77b4"
+      )
+    }
+
+    p <- p +
+      coord_flip() +
+      labs(title = paste("Pairwise estimates \u2014", spec, "(", method, ")"),
+           x = "Contrast", y = "Estimate \u00b1 95% CI") +
+      theme_minimal(base_size = 11)
+
+    print(p)
+    cat("\n\n")
+
+    num_cols <- sapply(mc_df, is.numeric)
+    mc_fmt <- mc_df
+    mc_fmt[num_cols] <- lapply(mc_fmt[num_cols], function(x) round(x, 4))
+    print(ft(mc_fmt, caption = paste("Comparison results \u2014", spec, "/", method, "/", mname)))
+    cat("\n\n")
+  }
+} else {
+  cat("Multiple comparisons were not enabled or no results available.")
+}
+```
+
+# 6. Residual Diagnostics
+
+*Residual diagnostic plots are generated interactively in the app (Residuals tab).
+The models included in this report are listed below for reference.*
+
+```{r residuals-note}
+if (length(params$selected_models) > 0) {
+  note_df <- data.frame(
+    `#`    = seq_along(params$selected_models),
+    Model  = params$selected_models,
+    check.names = FALSE,
+    stringsAsFactors = FALSE
+  )
+  ft(note_df, caption = "Models in report")
+} else {
+  cat("No models available.")
+}
+```
+
+---
+
+*Report generated by DataAnalysisApp on `r format(Sys.time(), "%d %B %Y at %H:%M")`.*
