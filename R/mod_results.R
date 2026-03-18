@@ -171,7 +171,7 @@ mod_results_ui <- function(id) {
                                   value = FALSE))
         ),
         uiOutput(ns("profiler_controls_ui")),
-        uiOutput(ns("profiler_plots_ui"))
+        div(style = "width: 100%;", uiOutput(ns("profiler_plots_ui")))
       ),
 
       # ── Multiple Comparisons ──────────────────────────────────────────────
@@ -1892,7 +1892,8 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
       n_models <- length(sel_models)
       row_h <- max(280, 500 / n_models)
       tagList(lapply(seq_along(sel_models), function(i) {
-        plotlyOutput(ns(paste0("profiler_row_", i)), height = paste0(row_h, "px"))
+        plotlyOutput(ns(paste0("profiler_row_", i)),
+                     width = "100%", height = paste0(row_h, "px"))
       }))
     })
 
