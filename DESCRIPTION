@@ -1,0 +1,47 @@
+Package: DoEWorkbench
+Title: Design of Experiments Workbench
+Version: 0.1.0
+Authors@R: person("Dipesh", email = "dipesh@example.com", role = c("aut", "cre"))
+Description: Interactive Shiny application for Design of Experiments (DoE) and
+    regression analysis. Provides tools for experimental design generation,
+    model building, ANOVA, effects analysis, residual diagnostics, multiple
+    comparisons, robustness checks, and report building. Statistical functions
+    are exported for use outside the app.
+License: MIT + file LICENSE
+URL: https://github.com/lufaslucas/DoEWorkbench
+BugReports: https://github.com/lufaslucas/DoEWorkbench/issues
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Depends:
+    R (>= 4.1.0)
+Imports:
+    shiny (>= 1.7.0),
+    bslib,
+    shinyjs,
+    DT,
+    plotly,
+    ggplot2,
+    dplyr,
+    tidyr,
+    car,
+    emmeans,
+    multcomp,
+    readxl,
+    rmarkdown,
+    flextable,
+    RColorBrewer,
+    base64enc,
+    digest
+Suggests:
+    officedown,
+    patchwork,
+    FrF2,
+    DoE.base,
+    rsm,
+    AlgDesign,
+    lhs,
+    MaxPro,
+    skpr,
+    testthat (>= 3.0.0),
+    devtools

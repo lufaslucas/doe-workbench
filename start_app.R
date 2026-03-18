@@ -1,3 +1,3 @@
-setwd("/Users/dipesh/Documents/AI/DataAnalysisApp")
+here::i_am("start_app.R")
 port <- as.integer(Sys.getenv("PORT", "4562"))
-shiny::runApp("/Users/dipesh/Documents/AI/DataAnalysisApp", port = port, launch.browser = FALSE)
+shiny::runApp(here::here(), port = port, launch.browser = TRUE)

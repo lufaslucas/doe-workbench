@@ -1,0 +1,18 @@
+# R package
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
+# macOS
+.DS_Store
+
+# Temp files
+*.log
+*.bak
+
+# IDE
+.vscode/
+
+# Claude Code tooling
+.claude/

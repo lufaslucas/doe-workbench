@@ -14,7 +14,8 @@ suppressPackageStartupMessages({
   library(DT)
 })
 
-setwd("/Users/dipesh/Documents/AI/DataAnalysisApp")
+here::i_am("test_all_examples.R")
+setwd(here::here())
 source("global.R")
 
 cat("=== Test Script: All Example Datasets ===\n\n")
@@ -75,7 +76,8 @@ run_test("build_formulas (main effects)", {
 rcbd_models <- NULL
 run_test("fit_models", {
   f <- build_formulas("Yield", c("A","B"), covariates = c("Temp_C","RunOrder"), blocks = c("Block"), max_way = 2)
-  rcbd_models <<- fit_models(f, df_rcbd, col_types = col_types_rcbd)
+  result <- fit_models(f, df_rcbd, col_types = col_types_rcbd)
+  rcbd_models <<- result$models
   stopifnot(length(rcbd_models) > 0)
   cat("    Fitted", length(rcbd_models), "models\n")
 })
@@ -230,7 +232,8 @@ med_models <- NULL
 run_test("fit_models (compare with/without covariate)", {
   f1 <- c("Strength ~ Catalyst" = "Strength ~ Catalyst")
   f2 <- c("Strength ~ Catalyst + Viscosity" = "Strength ~ Catalyst + Viscosity")
-  med_models <<- fit_models(c(f1, f2), df_med, col_types = col_types_med)
+  result <- fit_models(c(f1, f2), df_med, col_types = col_types_med)
+  med_models <<- result$models
   stopifnot(length(med_models) == 2)
 })
 
@@ -254,6 +257,53 @@ run_test("Covariate effect (Viscosity)", {
 run_test("run_mc (Tukey on Catalyst)", {
   mc <- run_mc(med_models[[1]], "Catalyst", "tukey")
   stopifnot(nrow(mc) > 0)
+})
+
+# --- Robustness helpers (on Mediator Trap models) ---
+run_test("robustness_pairwise_order", {
+  res <- robustness_pairwise_order(med_models, "Catalyst")
+  stopifnot(!is.null(res$detail), nrow(res$detail) > 0)
+  stopifnot(!is.null(res$summary), nrow(res$summary) > 0)
+  cat("    Pairs:", nrow(res$summary), "   Verdicts:", paste(res$summary$Verdict, collapse=", "), "\n")
+})
+
+run_test("robustness_pairwise_significance", {
+  res <- robustness_pairwise_significance(med_models, "Catalyst", method = "tukey", alpha = 0.05)
+  stopifnot(!is.null(res$detail), nrow(res$detail) > 0)
+  stopifnot(!is.null(res$summary), nrow(res$summary) > 0)
+  cat("    Verdicts:", paste(res$summary$Verdict, collapse=", "), "\n")
+})
+
+run_test("covariate_mediation_check", {
+  df_med$Catalyst <- as.factor(df_med$Catalyst)
+  res <- covariate_mediation_check(df_med, "Viscosity", "Catalyst", alpha = 0.05, r2_thresh = 0.30)
+  stopifnot(nrow(res) > 0)
+  cat("    Viscosity verdict:", res$Verdict[1], "\n")
+})
+
+run_test("robustness_coefficient_check", {
+  res <- robustness_coefficient_check(med_models, alpha = 0.05)
+  stopifnot(!is.null(res$sign_summary), nrow(res$sign_summary) > 0)
+  stopifnot(!is.null(res$sig_summary), nrow(res$sig_summary) > 0)
+  # Check Models_Total is NOT present (removed)
+  stopifnot(!"Models_Total" %in% names(res$sign_summary))
+  cat("    Sign verdicts:", paste(res$sign_summary$Verdict, collapse=", "), "\n")
+  cat("    Sig verdicts:", paste(res$sig_summary$Verdict, collapse=", "), "\n")
+})
+
+run_test("outlier_influence_check", {
+  res <- outlier_influence_check(med_models[[1]], "Catalyst", alpha = 0.05, max_iter = 3)
+  stopifnot(!is.null(res$influence_df), nrow(res$influence_df) > 0)
+  cat("    Flagged obs:", sum(res$influence_df$Flagged), "\n")
+})
+
+run_test("model_selection_review", {
+  res <- model_selection_review(med_models, names(med_models)[2], "Catalyst",
+                                 method = "tukey", alpha = 0.05)
+  stopifnot(!is.null(res$verdict))
+  stopifnot(nrow(res$lsmean_audit) > 0)
+  cat("    Verdict:", res$verdict$overall, "\n")
+  cat("    Flags:", length(res$verdict$flags), "\n")
 })
 
 cat("\n")
@@ -286,7 +336,8 @@ run_test("fit_models (Block only, Covariate only, Both)", {
     "Biomass ~ Fertilizer + SoilMoisture" = "Biomass ~ Fertilizer + SoilMoisture",
     "Biomass ~ Fertilizer + Plot + SoilMoisture" = "Biomass ~ Fertilizer + Plot + SoilMoisture"
   )
-  col_models <<- fit_models(f, df_col, col_types = col_types_col)
+  result <- fit_models(f, df_col, col_types = col_types_col)
+  col_models <<- result$models
   stopifnot(length(col_models) == 3)
 })
 
@@ -337,8 +388,9 @@ run_test("build_regression_formulas", {
 ff_models <- NULL
 run_test("fit_models (regression with coding)", {
   f <- build_regression_formulas("Yield", c("A","B","C","D"), max_way = 2, poly_degree = 1)
-  ff_models <<- fit_models(f, base, col_types = col_types_ff,
-                            transforms = transforms_ff, coding_values = coding_vals_ff)
+  result <- fit_models(f, base, col_types = col_types_ff,
+                        transforms = transforms_ff, coding_values = coding_vals_ff)
+  ff_models <<- result$models
   stopifnot(length(ff_models) > 0)
   cat("    Fitted", length(ff_models), "models\n")
 })
@@ -408,8 +460,9 @@ run_test("build_regression_formulas (quadratic)", {
 ccd_models <- NULL
 run_test("fit_models (CCD full quadratic)", {
   f <- build_regression_formulas("Response", c("x1","x2"), max_way = 2, poly_degree = 2)
-  ccd_models <<- fit_models(f, df_ccd, col_types = col_types_ccd,
-                             transforms = transforms_ccd, coding_values = coding_vals_ccd)
+  result <- fit_models(f, df_ccd, col_types = col_types_ccd,
+                        transforms = transforms_ccd, coding_values = coding_vals_ccd)
+  ccd_models <<- result$models
   stopifnot(length(ccd_models) > 0)
   cat("    Fitted", length(ccd_models), "models\n")
 })

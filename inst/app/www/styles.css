@@ -1,0 +1,103 @@
+/* Fix Bootstrap 5 tab-pane visibility for nested tabsets */
+.tab-pane:not(.active) { display: none !important; }
+.tab-pane.active { display: block !important; }
+
+/* Facet panel outlines */
+.well, .card { border: 1px solid #dee2e6; }
+
+/* Session buttons in navbar */
+.session-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  position: absolute;
+  right: 20px;
+  top: 8px;
+  z-index: 1000;
+}
+.session-controls .btn { padding: 4px 10px; font-size: 0.82em; opacity: 1; }
+.session-controls > .btn,
+.session-controls > .btn-group > .btn {
+  background: #ffffff;
+  border-color: #adb5bd;
+  color: #333;
+}
+.session-controls > .btn:hover,
+.session-controls > .btn-group > .btn:hover {
+  background: #e9ecef;
+  border-color: #6c757d;
+}
+#load_session_hidden { display: none; }
+
+/* Save dropdown items */
+.session-controls .dropdown-menu { font-size: 0.85em; min-width: 200px; }
+.session-controls .dropdown-item { padding: 6px 16px; }
+.session-controls .dropdown-item .fa { margin-right: 6px; width: 16px; text-align: center; }
+/* downloadButton inside dropdown: reset to look like a dropdown item */
+.session-controls .dropdown-item.btn { background: none; border: none; text-align: left; width: 100%; color: #212529; }
+.session-controls .dropdown-item.btn:hover { background: #f8f9fa; }
+
+/* Alias warning badges in formula list */
+.alias-warning {
+  color: #856404;
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 4px;
+  padding: 3px 8px;
+  margin: -8px 0 8px 40px;
+  font-size: 0.82em;
+  display: inline-block;
+}
+.alias-warning .fa { margin-right: 4px; }
+.alias-pair-row { padding: 6px 0; border-bottom: 1px solid #eee; }
+
+/* Linked selection indicator bar */
+.selection-bar {
+  display: inline-flex;
+  align-items: center;
+  background: #e3f2fd;
+  border: 1px solid #90caf9;
+  border-radius: 4px;
+  padding: 4px 12px;
+  margin-bottom: 8px;
+  font-size: 0.85em;
+  color: #1565c0;
+}
+.selection-count { font-weight: 600; }
+.selection-bar .btn { padding: 1px 8px; font-size: 0.8em; }
+
+/* Read-only mode banner */
+.readonly-banner {
+  display: inline-flex;
+  align-items: center;
+  background: #d32f2f;
+  color: #ffffff;
+  border-radius: 4px;
+  padding: 4px 14px;
+  font-size: 0.85em;
+  font-weight: 600;
+  position: fixed;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1100;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+.readonly-banner .fa, .readonly-banner .fas { margin-right: 6px; }
+.readonly-banner .btn {
+  padding: 1px 10px;
+  font-size: 0.8em;
+  border-color: rgba(255,255,255,0.5);
+  color: #fff;
+}
+.readonly-banner .btn:hover {
+  background: rgba(255,255,255,0.2);
+  border-color: #fff;
+  color: #fff;
+}
+
+/* Plotly title: override default Open Sans 20px to match app */
+.plotly .gtitle {
+  font-family: Arial, Helvetica, sans-serif !important;
+  font-size: 14px !important;
+}

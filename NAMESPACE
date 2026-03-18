@@ -1,0 +1,30 @@
+# NAMESPACE — Generated for DoEWorkbench package
+# Export all non-dot-prefixed objects (functions, constants, modules)
+exportPattern("^[^\\.]")
+
+# Core Shiny + UI
+import(shiny)
+import(bslib)
+import(shinyjs)
+import(DT)
+
+# Plotting
+import(plotly)
+import(ggplot2)
+import(RColorBrewer)
+
+# Data wrangling
+import(dplyr)
+import(tidyr)
+
+# Statistics
+import(car)
+import(emmeans)
+import(multcomp)
+
+# I/O
+import(readxl)
+import(rmarkdown)
+import(flextable)
+import(base64enc)
+import(digest)

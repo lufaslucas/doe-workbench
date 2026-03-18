@@ -1,0 +1,14 @@
+^\.claude$
+^\.DS_Store$
+^start_app\.R$
+^test_.*\.R$
+^install_.*\.R$
+^\.Rproj\.user$
+^.*\.Rproj$
+^\.github$
+^data-raw$
+^\.vscode$
+^server\.R\.bak$
+^file.*\.log$
+^\.DS_Store$
+^\.gitignore$

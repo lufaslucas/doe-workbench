@@ -1,0 +1,891 @@
+# R/mod_models.R -- Models tab module (UI + server)
+
+# ── UI ───────────────────────────────────────────────────────────────────────
+mod_models_ui <- function(id) {
+  ns <- NS(id)
+  tagList(
+    fluidRow(
+      column(4,
+        wellPanel(
+          h4("Model Builder"),
+          selectInput(ns("active_response"), "Response variable", choices = NULL),
+          h5("Factor terms"),
+          numericInput(ns("max_way"), "Max factor interaction order", value = 2, min = 1, max = 5),
+          conditionalPanel(
+            condition = "input.analysis_mode == 'regression'",
+            numericInput(ns("poly_degree"), "Polynomial degree", value = 2, min = 1, max = 3)
+          ),
+          h5("Covariates & blocks"),
+          uiOutput(ns("formula_cov_selector_ui")),
+          conditionalPanel(
+            condition = paste0("input['", ns("include_covariates"), "'] == true"),
+            checkboxInput(ns("include_cov_fac"), "Include covariate \u00d7 factor interactions", value = FALSE)
+          ),
+          checkboxInput(ns("include_blocks"), "Include blocks", value = TRUE),
+          checkboxInput(ns("include_block_fac"), "Include block \u00d7 factor interactions", value = FALSE),
+          hr(),
+          actionButton(ns("generate_formulas"), "Generate Formulas",
+                       class = "btn-primary btn-sm w-100 mb-2",
+                       icon = icon("cogs")),
+          div(
+            style = "margin-bottom: 6px;",
+            actionButton(ns("select_all_formulas"), "Select All",
+                         class = "btn-sm btn-outline-secondary"),
+            actionButton(ns("deselect_all_formulas"), "Deselect All",
+                         class = "btn-sm btn-outline-secondary ms-1")
+          ),
+          div(style = "max-height: 300px; overflow-y: auto;",
+            uiOutput(ns("formula_list_ui"))
+          ),
+          hr(),
+          h5("Custom formula"),
+          textInput(ns("custom_formula"), NULL, placeholder = "y ~ A + B + A:B"),
+          uiOutput(ns("formula_custom_chooser")),
+          actionButton(ns("add_custom"), "Add Custom", class = "btn-sm btn-outline-primary"),
+          hr(),
+          numericInput(ns("mc_alpha_sidebar"), "Significance level (\u03b1)",
+                       value = 0.05, min = 0.001, max = 0.5, step = 0.01),
+          actionButton(ns("run_models"), "Run Selected Models",
+                       class = "btn-success w-100"),
+          hr(),
+          h5("Backward Elimination"),
+          numericInput(ns("prune_alpha"), "Alpha threshold", value = 0.05,
+                       min = 0.001, max = 0.5, step = 0.01),
+          actionButton(ns("prune_btn"), "Prune Selected Models",
+                       class = "btn-warning w-100",
+                       icon = icon("scissors"))
+        )
+      ),
+      column(8,
+        wellPanel(
+          h4("Multiple Comparisons"),
+          checkboxInput(ns("mc_on"), "Enable multiple comparisons", value = FALSE),
+          conditionalPanel(
+            condition = paste0("input['", ns("mc_on"), "'] == true"),
+            uiOutput(ns("mc_no_terms_msg")),
+            h5("Terms to test"),
+            checkboxGroupInput(ns("mc_terms"), NULL, choices = NULL),
+            h5("Methods"),
+            checkboxGroupInput(ns("mc_method"), NULL,
+                               choices = c("Student (unadjusted)" = "student",
+                                           "Dunnett (vs control)" = "dunnett",
+                                           "MaxT (custom pairs)" = "custom",
+                                           "Tukey (all pairs)" = "tukey"),
+                               selected = "tukey"),
+            conditionalPanel(
+              condition = paste0("input['", ns("mc_method"), "'] && ",
+                                 "input['", ns("mc_method"), "'].indexOf('dunnett') >= 0"),
+              uiOutput(ns("dunnett_controls_ui"))
+            ),
+            conditionalPanel(
+              condition = paste0("input['", ns("mc_method"), "'] && ",
+                                 "input['", ns("mc_method"), "'].indexOf('custom') >= 0"),
+              h6("Select pairwise comparisons"),
+              uiOutput(ns("mc_custom_pairs_ui"))
+            ),
+            actionButton(ns("run_mc_btn"), "Run Comparisons",
+                         class = "btn-primary w-100 mt-2",
+                         icon  = icon("calculator"))
+          )
+        ),
+        verbatimTextOutput(ns("model_run_status"))
+      )
+    )
+  )
+}
+
+# ── Server ───────────────────────────────────────────────────────────────────
+mod_models_server <- function(id, rv, role_selectors, shared_reactives,
+                              analysis_mode, reset_downstream,
+                              colour_theme, available_terms) {
+  moduleServer(id, function(input, output, session) {
+    ns <- session$ns
+    # Unpack role selectors for convenience
+    responses      <- role_selectors$responses
+    factors_       <- role_selectors$factors_
+    covariates     <- role_selectors$covariates
+    blocks         <- role_selectors$blocks
+    run_orders     <- role_selectors$run_orders
+    all_covariates <- role_selectors$all_covariates
+
+    # Unpack shared reactives
+    treatment       <- shared_reactives$treatment
+    treatment_label <- shared_reactives$treatment_label
+
+    # Unpack colour theme
+    default_col       <- colour_theme$default_col
+    cat_palette       <- colour_theme$cat_palette
+    cat_scale_colour  <- colour_theme$cat_scale_colour
+    cat_scale_fill    <- colour_theme$cat_scale_fill
+
+    # ── Local helpers ────────────────────────────────────────────────────
+
+    # Build term chooser buttons (namespaced for this module)
+    build_term_buttons_ns <- function(terms, target, btn_class) {
+      btns <- list()
+      groups <- list(
+        "Factors" = terms$factors,
+        "2FI" = terms$fac_2fi,
+        "3FI" = terms$fac_3fi,
+        "Quadratic" = terms$quadratic,
+        "Cubic" = terms$cubic,
+        "Blocks" = terms$blocks,
+        "Covariates" = terms$covariates,
+        "Blk\u00d7Fac" = terms$blk_fac,
+        "Cov\u00d7Fac" = terms$cov_fac
+      )
+      # Use namespaced input ID for Shiny.setInputValue
+      ns_target <- ns(paste0(target, "_term_click"))
+      for (grp_name in names(groups)) {
+        grp_terms <- groups[[grp_name]]
+        if (is.null(grp_terms) || length(grp_terms) == 0) next
+        for (t in grp_terms) {
+          js_call <- sprintf(
+            "Shiny.setInputValue('%s', {term: '%s', nonce: Math.random()});",
+            ns_target, gsub("'", "\\\\'", t)
+          )
+          btns <- c(btns, list(
+            tags$button(
+              type = "button",
+              class = paste("btn", btn_class, "btn-sm"),
+              style = "margin: 1px; padding: 1px 5px; font-size: 11px;",
+              onclick = js_call,
+              t
+            )
+          ))
+        }
+        btns <- c(btns, list(tags$span(" ", style = "margin-right: 4px;")))
+      }
+      div(style = "max-height: 80px; overflow-y: auto;", do.call(tagList, btns))
+    }
+
+    # ── Read-only guard ─────────────────────────────────────────────────
+    observe({
+      locked <- isTRUE(rv$read_only)
+      toggle <- if (locked) shinyjs::disable else shinyjs::enable
+      toggle(ns("generate_formulas"))
+      toggle(ns("add_custom"))
+      toggle(ns("custom_formula"))
+      toggle(ns("run_models"))
+      toggle(ns("prune_btn"))
+      toggle(ns("run_mc_btn"))
+      toggle(ns("mc_on"))
+      toggle(ns("max_way"))
+      toggle(ns("poly_degree"))
+    })
+
+    # ── Sync MC inputs to rv ─────────────────────────────────────────────
+    observeEvent(input$mc_on, { if (isTRUE(rv$read_only)) return(); rv$mc_on <- input$mc_on }, ignoreInit = TRUE)
+    observeEvent(input$mc_alpha_sidebar, { if (isTRUE(rv$read_only)) return(); rv$mc_alpha <- input$mc_alpha_sidebar }, ignoreInit = TRUE)
+    observeEvent(input$mc_terms, { if (isTRUE(rv$read_only)) return(); rv$mc_terms <- input$mc_terms }, ignoreInit = TRUE)
+    observeEvent(input$mc_method, { if (isTRUE(rv$read_only)) return(); rv$mc_methods <- input$mc_method }, ignoreInit = TRUE)
+
+    # ── Active response selector ─────────────────────────────────────────
+    observe({
+      updateSelectInput(session, "active_response", choices = responses())
+    })
+
+    # ── Dynamic covariate selector for formula generator ─────────────────
+    output$formula_cov_selector_ui <- renderUI({
+      covs <- all_covariates()
+      if (length(covs) == 0) {
+        return(checkboxInput(ns("include_covariates"), "Include covariates", value = FALSE))
+      }
+      tagList(
+        checkboxInput(ns("include_covariates"), "Include covariates", value = TRUE),
+        conditionalPanel(
+          condition = paste0("input['", ns("include_covariates"), "'] == true"),
+          checkboxGroupInput(ns("formula_covariates"), "Covariates to include",
+                             choices = covs, selected = covs, inline = TRUE),
+          numericInput(ns("max_covariates_per_formula"), "Max covariates per formula",
+                       value = 1, min = 1, max = max(1, length(covs)), step = 1)
+        )
+      )
+    })
+
+    # ── Editable formula list ────────────────────────────────────────────
+    # Uses rv$formula_gen counter in IDs to avoid stale inputs after regeneration
+    output$formula_list_ui <- renderUI({
+      if (length(rv$formulas) == 0) return(p("No formulas generated yet.", class = "text-muted"))
+      gen <- rv$formula_gen
+      aliases <- rv$formula_aliases
+      labels  <- rv$alias_labels
+      inest   <- rv$inestimable_terms
+      tagList(lapply(seq_along(rv$formulas), function(i) {
+        f <- rv$formulas[[i]]
+        alias_warning <- NULL
+        if (f %in% names(aliases) && nrow(aliases[[f]]) > 0) {
+          af <- aliases[[f]]
+          pairs <- paste0(af$Term_1, " \u2194 ", af$Term_2,
+                          " (r=", round(af$Correlation, 2), ")")
+          alias_warning <- div(class = "alias-warning",
+            icon("exclamation-triangle"),
+            " Aliased: ", paste(pairs, collapse = "; ")
+          )
+        }
+        # Show aliased terms: one line per aliased group with warning icon
+        alias_info <- NULL
+        if (length(labels) > 0) {
+          parsed <- tryCatch(as.formula(f), error = function(e) NULL)
+          if (!is.null(parsed)) {
+            term_labels <- attr(terms(parsed), "term.labels")
+            aliased_terms <- intersect(term_labels, names(labels))
+            if (length(aliased_terms) > 0) {
+              lines <- lapply(aliased_terms, function(t) {
+                tags$div(style = "font-size: 12px; color: #856404;",
+                  icon("exclamation-triangle", style = "color: #e6a817; font-size: 11px;"),
+                  tags$span(style = "color: #856404;", " aliased: "),
+                  tags$code(style = "font-size: 11px;", labels[[t]])
+                )
+              })
+              alias_info <- div(style = "margin: -6px 0 4px 48px;",
+                do.call(tagList, lines)
+              )
+            }
+          }
+        }
+        # Show inestimable terms: stop icon per term
+        inest_info <- NULL
+        if (length(inest) > 0) {
+          parsed <- tryCatch(as.formula(f), error = function(e) NULL)
+          if (!is.null(parsed)) {
+            term_labels <- attr(terms(parsed), "term.labels")
+            inest_in_f <- intersect(term_labels, inest)
+            if (length(inest_in_f) > 0) {
+              lines <- lapply(inest_in_f, function(t) {
+                tags$div(style = "font-size: 12px; color: #dc3545;",
+                  icon("ban", style = "color: #dc3545; font-size: 11px;"),
+                  tags$span(style = "color: #dc3545;", " not estimable: "),
+                  tags$code(style = "font-size: 11px;", t)
+                )
+              })
+              inest_info <- div(style = "margin: -6px 0 4px 48px;",
+                do.call(tagList, lines)
+              )
+            }
+          }
+        }
+        div(
+          fluidRow(
+            column(1,
+              checkboxInput(ns(paste0("fsel_", gen, "_", i)), NULL, value = TRUE)
+            ),
+            column(11,
+              textInput(ns(paste0("fedit_", gen, "_", i)), NULL, value = f)
+            )
+          ),
+          alias_info,
+          inest_info,
+          alias_warning
+        )
+      }))
+    })
+
+    # ── Design-Aware Formula Limits ──────────────────────────────────────
+    # Constrain max_way and poly_degree based on data and design rank
+    observe({
+      req(rv$data, length(factors_()) > 0)
+      facs <- factors_()
+      n_facs <- length(facs)
+
+      # Max interaction order: capped by number of factors
+      max_way_limit <- min(n_facs, 5L)
+      cur_way <- isolate(input$max_way) %||% 2L
+      if (cur_way > max_way_limit)
+        updateNumericInput(session, "max_way", value = max_way_limit, max = max_way_limit)
+      else
+        updateNumericInput(session, "max_way", max = max_way_limit)
+
+      # Polynomial degree: max is min(unique_levels - 1) across numeric factors
+      mode <- analysis_mode() %||% "comparative"
+      if (mode == "regression") {
+        max_polys <- vapply(facs, function(cn) {
+          length(unique(rv$data[[cn]])) - 1L
+        }, integer(1))
+        max_poly_limit <- max(1L, min(max_polys, na.rm = TRUE))
+        max_poly_limit <- min(max_poly_limit, 5L)
+        cur_poly <- isolate(input$poly_degree) %||% 2L
+        if (cur_poly > max_poly_limit)
+          updateNumericInput(session, "poly_degree", value = max_poly_limit, max = max_poly_limit)
+        else
+          updateNumericInput(session, "poly_degree", max = max_poly_limit)
+      }
+    })
+
+    # ── Formula generation logic (shared by auto-observer & button) ─────
+    generate_formulas <- function() {
+      req(input$active_response, rv$data)
+
+      mode <- analysis_mode() %||% "comparative"
+      max_way <- input$max_way %||% 2L
+
+      # Filter covariates to user-selected subset
+      sel_covs <- if (isTRUE(input$include_covariates)) {
+        input$formula_covariates %||% all_covariates()
+      } else {
+        character(0)
+      }
+      max_cov <- input$max_covariates_per_formula %||% 1L
+
+      formulas <- if (mode == "regression") {
+        req(length(factors_()) > 0 || length(all_covariates()) > 0)
+        build_regression_formulas(
+          response          = input$active_response,
+          factors           = factors_(),
+          covariates        = sel_covs,
+          blocks            = blocks(),
+          max_way           = max_way,
+          poly_degree       = input$poly_degree %||% 2,
+          include_covariates = length(sel_covs) > 0,
+          include_cov_fac    = isTRUE(input$include_cov_fac),
+          include_blocks     = isTRUE(input$include_blocks),
+          include_block_fac  = isTRUE(input$include_block_fac),
+          max_covariates     = max_cov
+        )
+      } else {
+        req(length(factors_()) > 0)
+        build_formulas(
+          response          = input$active_response,
+          factors           = factors_(),
+          covariates        = sel_covs,
+          blocks            = blocks(),
+          max_way           = max_way,
+          include_covariates = length(sel_covs) > 0,
+          include_blocks     = isTRUE(input$include_blocks),
+          include_block_fac  = isTRUE(input$include_block_fac),
+          max_covariates     = max_cov
+        )
+      }
+      rv$formula_gen <- isolate(rv$formula_gen) + 1L
+
+      # Compute aliases for each formula
+      aliases <- list()
+      for (f in formulas) {
+        af <- tryCatch(detect_formula_aliases(rv$data, f), error = function(e) data.frame())
+        if (nrow(af) > 0) aliases[[f]] <- af
+      }
+
+      # Collapse aliased terms: remove redundant terms, build labels
+      if (length(aliases) > 0) {
+        collapsed <- collapse_aliased_formulas(formulas, aliases)
+        formulas <- collapsed$formulas
+        rv$alias_labels <- collapsed$alias_labels
+        # Re-detect aliases on collapsed formulas (should be clean now)
+        aliases <- list()
+        for (f in formulas) {
+          af <- tryCatch(detect_formula_aliases(rv$data, f), error = function(e) data.frame())
+          if (nrow(af) > 0) aliases[[f]] <- af
+        }
+      } else {
+        rv$alias_labels <- list()
+      }
+
+      # Detect inestimable terms across all formulas
+      all_inest <- character()
+      for (f in formulas) {
+        inest <- detect_inestimable_terms(f, rv$data)
+        all_inest <- union(all_inest, inest)
+      }
+      rv$inestimable_terms <- all_inest
+
+      rv$formulas <- formulas
+      rv$formula_aliases <- aliases
+    }
+
+    # ── Reactive formula generation ──────────────────────────────────────
+    # Auto-updates when any input changes.
+    # IMPORTANT: all formula-builder inputs are read BEFORE the skip check
+    # so they register as reactive dependencies even on the first (skipped) run.
+    observe({
+      req(input$active_response, rv$data)
+
+      # Touch all formula-builder inputs to register dependencies
+      analysis_mode()
+      input$max_way
+      input$include_covariates
+      input$formula_covariates
+      input$max_covariates_per_formula
+      input$poly_degree
+      input$include_cov_fac
+      input$include_blocks
+      input$include_block_fac
+      factors_()
+      blocks()
+      all_covariates()
+
+      # Skip if example loader already set formulas (avoids conflict/overwrite)
+      if (isTRUE(isolate(rv$skip_auto_formula))) {
+        rv$skip_auto_formula <- FALSE
+        return()
+      }
+
+      generate_formulas()
+    })
+
+    # ── Manual formula generation (button) ───────────────────────────────
+    observeEvent(input$generate_formulas, {
+      if (is_locked(rv, "Formula generation")) return()
+      showNotification("Generating formulas...", type = "message", duration = 2)
+      rv$skip_auto_formula <- FALSE
+      generate_formulas()
+      showNotification(paste(length(rv$formulas), "formulas generated"), type = "message")
+    }, ignoreInit = TRUE)
+
+    # ── Collect selected & edited formulas ───────────────────────────────
+    get_selected_formulas <- reactive({
+      if (length(rv$formulas) == 0) return(character(0))
+      gen <- rv$formula_gen
+      sel <- character(0)
+      for (i in seq_along(rv$formulas)) {
+        checked <- input[[paste0("fsel_", gen, "_", i)]]
+        edited  <- input[[paste0("fedit_", gen, "_", i)]]
+        if (isTRUE(checked) && !is.null(edited) && nchar(trimws(edited)) > 0) {
+          f <- trimws(edited)
+          sel[f] <- f
+        }
+      }
+      sel
+    })
+
+    # ── Select / deselect all formulas ───────────────────────────────────
+    observeEvent(input$select_all_formulas, {
+      gen <- rv$formula_gen
+      for (i in seq_along(rv$formulas))
+        updateCheckboxInput(session, paste0("fsel_", gen, "_", i), value = TRUE)
+    })
+    observeEvent(input$deselect_all_formulas, {
+      gen <- rv$formula_gen
+      for (i in seq_along(rv$formulas))
+        updateCheckboxInput(session, paste0("fsel_", gen, "_", i), value = FALSE)
+    })
+
+    # ── Add custom formula ───────────────────────────────────────────────
+    observeEvent(input$add_custom, {
+      if (is_locked(rv, "Custom formula")) return()
+      req(input$custom_formula, nchar(trimws(input$custom_formula)) > 0)
+      f <- trimws(input$custom_formula)
+      rv$formula_gen <- isolate(rv$formula_gen) + 1L
+      rv$formulas <- c(rv$formulas, setNames(f, f))
+      updateTextInput(session, "custom_formula", value = "")
+
+      # Check aliases for the new formula
+      af <- tryCatch(detect_formula_aliases(rv$data, f), error = function(e) data.frame())
+      if (nrow(af) > 0) rv$formula_aliases[[f]] <- af
+    })
+
+    # ── Custom formula term chooser buttons ──────────────────────────────
+    output$formula_custom_chooser <- renderUI({
+      terms <- available_terms()
+      if (length(unlist(terms)) == 0) return(NULL)
+      build_term_buttons_ns(terms, "custom", "btn-outline-secondary")
+    })
+
+    # Observer: when any custom term button is clicked, append to custom formula
+    observeEvent(input$custom_term_click, {
+      if (isTRUE(rv$read_only)) return()
+      term <- input$custom_term_click$term
+      if (is.null(term)) return()
+      current <- input$custom_formula %||% ""
+      # If empty or just "y ~ " placeholder, start with response ~ term
+      stripped <- trimws(current)
+      if (nchar(stripped) == 0) {
+        # Auto-prepend response variable
+        resp <- input$active_response %||% "Y"
+        updateTextInput(session, "custom_formula", value = paste0(resp, " ~ ", term))
+      } else {
+        # Extract RHS (after ~)
+        if (grepl("~", stripped)) {
+          rhs <- trimws(sub("^[^~]+~", "", stripped))
+          existing <- trimws(strsplit(rhs, "\\+")[[1]])
+          if (!term %in% existing) {
+            updateTextInput(session, "custom_formula",
+                            value = paste0(stripped, " + ", term))
+          }
+        } else {
+          updateTextInput(session, "custom_formula",
+                          value = paste0(stripped, " + ", term))
+        }
+      }
+    })
+
+    # ── Model fitting logic ──────────────────────────────────────────────
+    # Extracted function: called directly or after alias resolution
+    # Also called by other modules (e.g. data upload) via returned reference
+    do_fit_models <- function(formulas_to_run) {
+      withProgress(message = "Fitting models...", value = 0, {
+        result <- fit_models(formulas_to_run, rv$data,
+                             col_types = rv$col_types,
+                             transforms = rv$transforms,
+                             coding_values = rv$coding_values)
+        rv$models <- result$models
+        rv$model_errors <- result$errors
+        rv$model_notes <- check_model_notes(rv$models)
+        incProgress(0.4)
+
+        # Update MC term choices (local module input)
+        all_terms_raw <- unique(unlist(lapply(rv$models, function(m) {
+          a <- tryCatch(model_anova(m, type=3), error=function(e) NULL)
+          if (!is.null(a)) rownames(a)[rownames(a) != "(Intercept)"] else character(0)
+        })))
+        factor_cols  <- factors_()
+        cat_factor_terms <- all_terms_raw[sapply(all_terms_raw, function(t) {
+          parts <- strsplit(t, ":")[[1]]
+          all(parts %in% factor_cols) &&
+            all(sapply(parts, function(cn) (rv$col_types[[cn]] %||% "Factor") == "Factor"))
+        })]
+        updateCheckboxGroupInput(session, "mc_terms",
+                                 choices = cat_factor_terms, selected = cat_factor_terms)
+
+        incProgress(0.3)
+
+        # Compute VIF
+        rv$vif_df <- vif_summary(rv$models)
+        if (nrow(rv$vif_df) > 0) {
+          model_cols <- setdiff(names(rv$vif_df), "Term")
+          vif_vals <- rv$vif_df[, model_cols, drop = FALSE]
+          high_mask <- apply(vif_vals, c(1,2), function(x) !is.na(x) && x > sqrt(5))
+          if (any(high_mask)) {
+            terms_flagged <- rv$vif_df$Term[apply(high_mask, 1, any)]
+            showNotification(
+              paste0("Collinearity detected (VIF): ",
+                     paste(terms_flagged, collapse = ", "),
+                     ". Check the Collinearity tab in Results."),
+              type = "warning", duration = 10)
+          }
+        }
+
+        incProgress(0.3)
+      })
+    }
+
+    # ── Run models button ────────────────────────────────────────────────
+    observeEvent(input$run_models, {
+      if (is_locked(rv, "Model fitting")) return()
+      req(rv$data)
+      formulas_to_run <- get_selected_formulas()
+      req(length(formulas_to_run) > 0)
+
+      # Re-detect aliases on final (possibly edited) formulas
+      aliases_found <- list()
+      for (f in formulas_to_run) {
+        af <- tryCatch(detect_formula_aliases(rv$data, f), error = function(e) data.frame())
+        if (nrow(af) > 0) aliases_found[[f]] <- af
+      }
+
+      if (length(aliases_found) > 0) {
+        rv$pending_alias_resolution <- list(
+          formulas = formulas_to_run,
+          aliases  = aliases_found
+        )
+        show_alias_modal(aliases_found)
+        return()
+      }
+
+      do_fit_models(formulas_to_run)
+    })
+
+    # ── Alias Resolution Modal ───────────────────────────────────────────
+    show_alias_modal <- function(aliases_found) {
+      # Build UI for each formula with aliases
+      pair_idx <- 0L
+      modal_items <- lapply(names(aliases_found), function(f) {
+        af <- aliases_found[[f]]
+        pair_rows <- lapply(seq_len(nrow(af)), function(j) {
+          pair_idx <<- pair_idx + 1L
+          t1 <- af$Term_1[j]; t2 <- af$Term_2[j]; corr <- af$Correlation[j]
+          sign_sym <- if (corr >= 0) "+" else "-"
+          relabel_text <- paste0(t1, " ", sign_sym, " ", t2)
+          relabel_label <- paste0("Retain & relabel as '", relabel_text, "'")
+          choice_vec <- c("remove", "relabel")
+          names(choice_vec) <- c("Remove both terms", relabel_label)
+          div(class = "alias-pair-row",
+            tags$strong(paste0(t1, " \u2194 ", t2, " (r=", round(corr, 2), ")")),
+            radioButtons(
+              inputId  = ns(paste0("alias_choice_", pair_idx)),
+              label    = NULL,
+              choices  = choice_vec,
+              selected = "relabel",
+              inline   = TRUE
+            )
+          )
+        })
+        tagList(
+          tags$hr(),
+          tags$p(tags$code(f), style = "font-size: 0.85em;"),
+          pair_rows
+        )
+      })
+
+      showModal(modalDialog(
+        title = "Resolve Aliased Terms",
+        size  = "l",
+        tagList(
+          p("The following formulas contain aliased (perfectly confounded) term pairs.",
+            "Choose how to handle each pair before fitting models."),
+          modal_items
+        ),
+        footer = tagList(
+          modalButton("Cancel"),
+          actionButton(ns("alias_resolve_confirm"), "Apply & Fit Models",
+                       class = "btn-primary")
+        )
+      ))
+    }
+
+    observeEvent(input$alias_resolve_confirm, {
+      if (is_locked(rv, "Alias resolution")) return()
+      req(rv$pending_alias_resolution)
+      pending  <- rv$pending_alias_resolution
+      formulas <- pending$formulas
+      aliases  <- pending$aliases
+      new_labels <- rv$alias_labels
+
+      # Build a mapping from old formula -> new formula
+      rewrite_map <- list()  # old_f -> new_f
+
+      pair_idx <- 0L
+      for (f in names(aliases)) {
+        af <- aliases[[f]]
+        terms_to_remove <- character()
+        for (j in seq_len(nrow(af))) {
+          pair_idx <- pair_idx + 1L
+          choice <- input[[paste0("alias_choice_", pair_idx)]] %||% "relabel"
+          t1 <- af$Term_1[j]; t2 <- af$Term_2[j]; corr <- af$Correlation[j]
+
+          if (choice == "remove") {
+            terms_to_remove <- c(terms_to_remove, t1, t2)
+          } else {
+            # Relabel: remove t2, keep t1, relabel t1
+            terms_to_remove <- c(terms_to_remove, t2)
+            sign_sym <- if (corr >= 0) "+" else "-"
+            new_labels[[t1]] <- paste0(t1, " ", sign_sym, " ", t2)
+          }
+        }
+
+        # Rewrite formula: remove specified terms
+        if (length(terms_to_remove) > 0) {
+          parsed <- tryCatch(as.formula(f), error = function(e) NULL)
+          if (!is.null(parsed)) {
+            tt <- terms(parsed)
+            term_labels <- attr(tt, "term.labels")
+            keep <- setdiff(term_labels, unique(terms_to_remove))
+            resp <- all.vars(parsed)[1]
+            if (length(keep) > 0) {
+              new_f <- paste0(resp, " ~ ", paste(keep, collapse = " + "))
+            } else {
+              new_f <- paste0(resp, " ~ 1")
+            }
+            rewrite_map[[f]] <- new_f
+          }
+        }
+      }
+
+      # Build resolved formula vector (avoids in-place mutation issues)
+      resolved <- character()
+      for (i in seq_along(formulas)) {
+        old_f <- formulas[[i]]
+        if (old_f %in% names(rewrite_map)) {
+          new_f <- rewrite_map[[old_f]]
+          resolved[new_f] <- new_f
+        } else {
+          resolved[old_f] <- old_f
+        }
+      }
+
+      rv$alias_labels <- new_labels
+      rv$pending_alias_resolution <- NULL
+      removeModal()
+      do_fit_models(resolved)
+    })
+
+    # ── Backward Elimination ─────────────────────────────────────────────
+    observeEvent(input$prune_btn, {
+      if (is_locked(rv, "Model pruning")) return()
+      req(length(rv$models) > 0)
+      alpha <- input$prune_alpha %||% 0.05
+
+      # Prune each currently fitted model
+      pruned <- list()
+      dup_notes <- character()
+      for (mname in names(rv$models)) {
+        m <- rv$models[[mname]]
+        pruned_m <- tryCatch(
+          backward_eliminate(m, alpha = alpha),
+          error = function(e) { message("Prune error: ", e$message); NULL }
+        )
+        if (!is.null(pruned_m)) {
+          new_label <- deparse(formula(pruned_m))
+          if (new_label %in% names(rv$models)) {
+            # Pruned model already exists -- add annotation
+            note <- paste0("Pruned from ", mname, " at \u03b1 = ", alpha)
+            existing <- rv$prune_notes[[new_label]]
+            rv$prune_notes[[new_label]] <- if (is.null(existing)) note
+                                           else paste(existing, note, sep = "; ")
+            dup_notes <- c(dup_notes, paste0(short_label(new_label, 50),
+                                             " (already in list, pruned from ",
+                                             short_label(mname, 30), ")"))
+          } else if (!new_label %in% names(pruned)) {
+            pruned[[new_label]] <- pruned_m
+            rv$prune_notes[[new_label]] <- paste0("Pruned from ", mname,
+                                                   " at \u03b1 = ", alpha)
+          }
+        }
+      }
+
+      if (length(pruned) > 0) {
+        rv$models <- c(rv$models, pruned)
+        for (f in names(pruned)) {
+          rv$formulas <- c(rv$formulas, setNames(f, f))
+        }
+        rv$vif_df <- vif_summary(rv$models)
+      }
+
+      msgs <- character()
+      if (length(pruned) > 0)
+        msgs <- c(msgs, paste0("Added ", length(pruned), " pruned model(s)."))
+      if (length(dup_notes) > 0)
+        msgs <- c(msgs, paste0("Already in list: ", paste(dup_notes, collapse = "; ")))
+      if (length(msgs) == 0)
+        msgs <- "No terms removed \u2014 all p-values already \u2264 alpha."
+
+      showNotification(paste(msgs, collapse = " "), type = "message", duration = 8)
+    })
+
+    # ── Multiple Comparisons ─────────────────────────────────────────────
+
+    # Dynamic UI: custom pair selection based on selected terms
+    # Uses emmeans pairwise contrast labels directly to ensure exact match with run_mc()
+    output$mc_custom_pairs_ui <- renderUI({
+      req(rv$data, length(input$mc_terms) > 0, length(rv$models) > 0)
+      pair_choices <- character()
+
+      # Use first model for computing contrasts and t-statistics
+      m <- rv$models[[1]]
+
+      for (spec in input$mc_terms) {
+        spec_parts <- strsplit(spec, ":")[[1]]
+        all_in_data <- all(spec_parts %in% names(rv$data))
+        if (!all_in_data) next
+
+        # Get actual emmeans pairwise contrast labels and t-statistics
+        pw_info <- tryCatch({
+          em <- suppressMessages(emmeans::emmeans(m, specs = spec_parts))
+          pw <- as.data.frame(summary(emmeans::contrast(em, method = "pairwise", adjust = "none")))
+          contr_col <- if ("contrast" %in% names(pw)) "contrast" else names(pw)[1]
+          t_col <- if ("t.ratio" %in% names(pw)) "t.ratio" else NULL
+          list(labels = as.character(pw[[contr_col]]),
+               t_vals = if (!is.null(t_col)) pw[[t_col]] else NULL)
+        }, error = function(e) NULL)
+
+        if (is.null(pw_info) || length(pw_info$labels) == 0) next
+
+        for (i in seq_along(pw_info$labels)) {
+          label <- pw_info$labels[i]
+          display <- paste0(spec, ": ", label)
+          pair_choices <- c(pair_choices, setNames(label, display))
+        }
+      }
+      if (length(pair_choices) == 0)
+        return(p(class = "text-muted small", "Select factor terms above first."))
+      checkboxGroupInput(ns("mc_custom_pairs"), NULL,
+                         choices = pair_choices, selected = pair_choices)
+    })
+
+    # MC results computation helper
+    run_mc_results <- function() {
+      req(length(rv$models) > 0, length(input$mc_terms) > 0, length(input$mc_method) > 0)
+      results <- list()
+      custom_pairs <- input$mc_custom_pairs
+      alpha <- input$mc_alpha_sidebar %||% 0.05
+      for (mname in names(rv$models)) {
+        model <- rv$models[[mname]]
+        for (spec in input$mc_terms) {
+          # Get per-term Dunnett control
+          ctrl_id <- paste0("dunnett_ctrl_", gsub(":", "_", spec))
+          ctrl_val <- input[[ctrl_id]]
+          for (method in input$mc_method) {
+            key <- paste(mname, spec, method, sep = "__")
+            results[[key]] <- run_mc(model, spec, method,
+                                     control        = ctrl_val,
+                                     selected_pairs = custom_pairs,
+                                     alpha          = alpha)
+            # Add model column
+            if (nrow(results[[key]]) > 0) results[[key]]$model <- mname
+          }
+        }
+      }
+      rv$mc_results <- results
+    }
+
+    # MC: show message and disable button when no categorical factor terms
+    output$mc_no_terms_msg <- renderUI({
+      mc_choices <- input$mc_terms
+      # Check if there are any categorical factor terms available
+      cat_factors <- names(Filter(function(r) r == "Factor", rv$roles))
+      cat_factors <- cat_factors[sapply(cat_factors, function(cn) {
+        (rv$col_types[[cn]] %||% "Factor") == "Factor"
+      })]
+      if (length(cat_factors) == 0) {
+        shinyjs::disable(ns("run_mc_btn"))
+        div(class = "alert alert-info p-2 mb-2",
+            icon("info-circle"),
+            "No categorical factor terms available for multiple comparisons. ",
+            "MC requires factors with Type = Factor (not Numeric). ",
+            "Switch to Comparative mode or change factor types in Assign Roles.")
+      } else {
+        shinyjs::enable(ns("run_mc_btn"))
+        NULL
+      }
+    })
+
+    observeEvent(input$run_mc_btn, {
+      if (is_locked(rv, "Multiple comparisons")) return()
+      req(isTRUE(input$mc_on))
+      withProgress(message = "Running comparisons...", value = 0.5, {
+        run_mc_results()
+      })
+      showNotification("Multiple comparisons complete.", type = "message")
+    })
+
+    # Dynamic Dunnett control: one dropdown per selected MC term
+    output$dunnett_controls_ui <- renderUI({
+      terms <- input$mc_terms
+      req(rv$data, length(terms) > 0)
+      inputs <- lapply(terms, function(spec) {
+        spec_parts <- strsplit(spec, ":")[[1]]
+        all_in_data <- all(spec_parts %in% names(rv$data))
+        if (!all_in_data) return(NULL)
+        if (length(spec_parts) == 1) {
+          lvls <- sort(unique(as.character(rv$data[[spec]])))
+        } else {
+          combo_df <- unique(rv$data[, spec_parts, drop = FALSE])
+          lvls <- sort(unname(apply(combo_df, 1, function(r) paste(trimws(r), collapse = " "))))
+        }
+        selectInput(ns(paste0("dunnett_ctrl_", gsub(":", "_", spec))),
+                    paste0("Control for ", spec), choices = lvls)
+      })
+      tagList(inputs)
+    })
+
+    # ── Model run status ─────────────────────────────────────────────────
+    output$model_run_status <- renderText({
+      n <- length(rv$models)
+      if (n == 0) return("No models fitted yet.")
+      lines <- sapply(names(rv$models), function(mname) {
+        note <- rv$prune_notes[[mname]]
+        if (!is.null(note)) paste0(mname, "  [", note, "]") else mname
+      })
+      paste(n, "model(s) fitted:", paste(lines, collapse = "\n"))
+    })
+
+    # ── Return exports for use by other modules ──────────────────────────
+    list(
+      do_fit_models = do_fit_models,
+      set_custom_formula = function(text) {
+        updateTextInput(session, "custom_formula", value = text)
+      },
+      get_custom_formula = reactive({ input$custom_formula }),
+      get_active_response = reactive({ input$active_response })
+    )
+  })
+}
