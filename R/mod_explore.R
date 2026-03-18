@@ -454,14 +454,18 @@ mod_explore_server <- function(id, rv, colour_theme, role_selectors,
 
       grand_mean <- mean(df[[resp_col]], na.rm = TRUE)
 
+      # Always compute group means — needles extend to group mean, not raw point
+      trt_means <- aggregate(df[[resp_col]],
+                              by = list(.trt_id = df$.trt_id), FUN = mean, na.rm = TRUE)
+      names(trt_means)[2] <- ".group_mean"
+
       if (sort_mode == "response") {
-        trt_means <- aggregate(df[[resp_col]],
-                                by = list(.trt_id = df$.trt_id), FUN = mean, na.rm = TRUE)
-        names(trt_means)[2] <- "mean_y"
-        trt_order <- trt_means$.trt_id[order(trt_means$mean_y)]
+        trt_order <- trt_means$.trt_id[order(trt_means$.group_mean)]
         df$.trt_id <- factor(df$.trt_id, levels = trt_order)
+        trt_means$.trt_id <- factor(trt_means$.trt_id, levels = trt_order)
       } else {
         df$.trt_id <- factor(df$.trt_id)
+        trt_means$.trt_id <- factor(trt_means$.trt_id, levels = levels(df$.trt_id))
       }
 
       cv <- explore_colour()
@@ -469,6 +473,8 @@ mod_explore_server <- function(id, rv, colour_theme, role_selectors,
       has_colour <- !is.null(cv)
 
       df$.grand_mean <- grand_mean
+      # Merge group mean onto df for tooltip access; needle uses trt_means directly
+      df <- merge(df, trt_means, by = ".trt_id", all.x = TRUE)
 
       if (has_colour) {
         df$.colour <- cv
@@ -477,9 +483,10 @@ mod_explore_server <- function(id, rv, colour_theme, role_selectors,
         dcol <- default_col()
         p <- ggplot(df, aes(x = .trt_id, y = .data[[resp_col]])) +
           geom_hline(yintercept = grand_mean, colour = "grey40", linewidth = 0.8) +
-          geom_segment(aes(x = .trt_id, xend = .trt_id,
-                           y = .grand_mean, yend = .data[[resp_col]]),
-                       colour = dcol, alpha = 0.5, linewidth = 0.6) +
+          geom_segment(data = trt_means,
+                       aes(x = .trt_id, xend = .trt_id,
+                           y = grand_mean, yend = .group_mean),
+                       colour = dcol, linewidth = 1.2) +
           geom_point(aes(colour = .colour), size = 2.5, alpha = 0.8)
         if (is_cont) {
           p <- p + cont_scale_colour()()
@@ -490,9 +497,10 @@ mod_explore_server <- function(id, rv, colour_theme, role_selectors,
         dcol <- default_col()
         p <- ggplot(df, aes_string(x = ".trt_id", y = resp_col)) +
           geom_hline(yintercept = grand_mean, colour = "grey40", linewidth = 0.8) +
-          geom_segment(aes_string(x = ".trt_id", xend = ".trt_id",
-                                   y = ".grand_mean", yend = resp_col),
-                       colour = dcol, alpha = 0.5, linewidth = 0.6) +
+          geom_segment(data = trt_means,
+                       aes(x = .trt_id, xend = .trt_id,
+                           y = grand_mean, yend = .group_mean),
+                       colour = dcol, linewidth = 1.2) +
           geom_point(colour = dcol, size = 2.5, alpha = 0.8)
       }
 

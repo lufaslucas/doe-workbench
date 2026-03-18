@@ -533,6 +533,9 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
           all(parts %in% factor_cols) &&
             all(sapply(parts, function(cn) (rv$col_types[[cn]] %||% "Factor") == "Factor"))
         })]
+        # Sort: highest-order interactions first (treatment A:B before A, B)
+        n_parts <- sapply(cat_factor_terms, function(t) length(strsplit(t, ":")[[1]]))
+        cat_factor_terms <- cat_factor_terms[order(-n_parts, cat_factor_terms)]
         updateCheckboxGroupInput(session, "mc_terms",
                                  choices = cat_factor_terms, selected = cat_factor_terms)
 
