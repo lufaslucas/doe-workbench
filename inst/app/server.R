@@ -494,38 +494,42 @@ server <- function(input, output, session) {
                     ))
 
   # ── Linked Selection: global observers ───────────────────────────────
-  # event_data() uses session$rootScope(), so a single observer here
-  # captures events from all module plots sharing SEL_SOURCE.
+  # event_data() must be called inside observe() to properly set up its
+  # internal plotlyInputStore reactive. observeEvent(event_data(...)) does
+  # not establish the dependency chain reliably.
 
   # Lasso / box select → set selection
-  observeEvent(event_data("plotly_selected", source = SEL_SOURCE), {
+  observe({
     ed <- event_data("plotly_selected", source = SEL_SOURCE)
     if (is.null(ed) || nrow(ed) == 0) return()
     new_ids <- as.integer(ed$key)
     new_ids <- new_ids[!is.na(new_ids)]
-    if (length(new_ids) > 0) rv$selected_obs <- unique(new_ids)
+    if (length(new_ids) > 0) isolate(rv$selected_obs <- unique(new_ids))
   })
 
   # Single click → toggle point in/out of selection
-  observeEvent(event_data("plotly_click", source = SEL_SOURCE), {
+  observe({
     ed <- event_data("plotly_click", source = SEL_SOURCE)
     if (is.null(ed) || nrow(ed) == 0) return()
     clicked_id <- as.integer(ed$key[1])
     if (is.na(clicked_id)) return()
-    current <- rv$selected_obs
-    if (is.null(current)) {
-      rv$selected_obs <- clicked_id
-    } else if (clicked_id %in% current) {
-      remaining <- setdiff(current, clicked_id)
-      rv$selected_obs <- if (length(remaining) == 0) NULL else remaining
-    } else {
-      rv$selected_obs <- c(current, clicked_id)
-    }
+    isolate({
+      current <- rv$selected_obs
+      if (is.null(current)) {
+        rv$selected_obs <- clicked_id
+      } else if (clicked_id %in% current) {
+        remaining <- setdiff(current, clicked_id)
+        rv$selected_obs <- if (length(remaining) == 0) NULL else remaining
+      } else {
+        rv$selected_obs <- c(current, clicked_id)
+      }
+    })
   })
 
   # Double-click / deselect → clear selection
-  observeEvent(event_data("plotly_deselect", source = SEL_SOURCE), {
-    rv$selected_obs <- NULL
+  observe({
+    ed <- event_data("plotly_deselect", source = SEL_SOURCE)
+    if (!is.null(ed)) isolate(rv$selected_obs <- NULL)
   })
 
   # Clear button

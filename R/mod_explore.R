@@ -247,6 +247,9 @@ mod_explore_server <- function(id, rv, colour_theme, role_selectors,
       p <- p + labs(title = paste(resp, "by", fac), x = fac, y = resp) + theme_app()
       p <- explore_facet(p)
       ggplotly(p, source = SEL_SOURCE) %>%
+        plotly::event_register("plotly_selected") %>%
+        plotly::event_register("plotly_click") %>%
+        plotly::event_register("plotly_deselect") %>%
         apply_selection_style(df[[ROW_ID_COL]], rv$selected_obs)
     })
 
@@ -314,6 +317,9 @@ mod_explore_server <- function(id, rv, colour_theme, role_selectors,
       p <- p + labs(title = paste(resp, "by block:", blk), x = blk, y = resp) + theme_app()
       p <- explore_facet(p)
       ggplotly(p, source = SEL_SOURCE) %>%
+        plotly::event_register("plotly_selected") %>%
+        plotly::event_register("plotly_click") %>%
+        plotly::event_register("plotly_deselect") %>%
         apply_selection_style(df[[ROW_ID_COL]], rv$selected_obs)
     })
 
@@ -401,6 +407,9 @@ mod_explore_server <- function(id, rv, colour_theme, role_selectors,
         theme_app()
       p <- explore_facet(p)
       ggplotly(p, source = SEL_SOURCE) %>%
+        plotly::event_register("plotly_selected") %>%
+        plotly::event_register("plotly_click") %>%
+        plotly::event_register("plotly_deselect") %>%
         apply_selection_style(df[[ROW_ID_COL]], rv$selected_obs)
     })
 

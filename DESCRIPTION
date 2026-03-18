@@ -27,6 +27,10 @@ Imports:
     car,
     emmeans,
     multcomp,
+    lmtest,
+    agricolae,
+    knitr,
+    gridExtra,
     readxl,
     rmarkdown,
     flextable,
@@ -35,6 +39,7 @@ Imports:
     digest
 Suggests:
     officedown,
+    tinytex,
     patchwork,
     FrF2,
     DoE.base,

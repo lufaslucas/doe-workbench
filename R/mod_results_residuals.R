@@ -444,6 +444,18 @@ results_residuals_server <- function(input, output, session, rv,
     dt
   })
 
+  # ── Outlier table row selection → linked plot highlight ────────────
+  observeEvent(input$outlier_table_rows_selected, {
+    sel <- input$outlier_table_rows_selected
+    df_d <- resid_df()
+    flagged <- df_d[df_d$outlier_flag != "ok" | df_d$influential, , drop = FALSE]
+    if (length(sel) == 0 || nrow(flagged) == 0) {
+      rv$selected_obs <- NULL
+      return()
+    }
+    rv$selected_obs <- as.integer(flagged$row_id[sel])
+  }, ignoreNULL = TRUE)
+
   output$excluded_info_ui <- renderUI({
     mname <- input$resid_model
     excl <- rv$excluded_obs[[mname]]

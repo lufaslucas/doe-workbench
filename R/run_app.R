@@ -7,8 +7,8 @@
 run_doe_workbench <- function(port = 4564L, launch.browser = TRUE, ...) {
   app_dir <- system.file("app", package = "DoEWorkbench")
   if (app_dir == "") {
-    # Development mode: run from source
-    app_dir <- here::here()
+    # Development mode: run from source tree
+    app_dir <- file.path(getwd(), "inst", "app")
   }
   shiny::runApp(app_dir, port = port, launch.browser = launch.browser, ...)
 }
