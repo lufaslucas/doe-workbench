@@ -265,14 +265,8 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
         sel <- if (length(resps) > 0) resps[1] else NULL
         rv$model_active_response <- sel
       }
-      if (length(resps) == 0) {
-        updateSelectInput(session, "active_response",
-                          choices = c("(none)" = ""),
-                          selected = "")
-      } else {
-        updateSelectInput(session, "active_response", choices = resps,
-                          selected = sel %||% "")
-      }
+      updateSelectInput(session, "active_response", choices = resps,
+                        selected = sel %||% "")
     })
 
     # ── Weight column selector ─────────────────────────────────────────
@@ -1155,14 +1149,8 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
         sel_resp <- if (length(resps) > 0) resps[1] else NULL
         rv$model_active_response <- sel_resp
       }
-      if (length(resps) == 0) {
-        updateSelectInput(session, "active_response",
-                          choices = c("(none)" = ""),
-                          selected = "")
-      } else {
-        updateSelectInput(session, "active_response", choices = resps,
-                          selected = sel_resp %||% "")
-      }
+      updateSelectInput(session, "active_response", choices = resps,
+                        selected = sel_resp %||% "")
       updateTextAreaInput(session, "custom_formula", value = rv$model_custom_formula %||% "")
       updateNumericInput(session, "max_way", value = rv$model_max_way %||% MAX_WAY_DEFAULT)
       updateNumericInput(session, "poly_degree", value = rv$model_poly_degree %||% POLY_DEGREE_DEFAULT)

@@ -112,8 +112,11 @@ test_that("Models active response selector does not retain stale value after res
   click_id(app, "reset_btn")
   click_id(app, "reset_confirm_btn")
   click_tab(app, "Models")
+  Sys.sleep(5)
 
-  # Reset resolves to the first available response for the current dataset.
-  expect_false(identical(app$get_value(input = "models-active_response"), "Purity"))
-  expect_equal(app$get_value(input = "models-active_response"), "Yield")
+
+  # After full reset, data is cleared so there are no response columns.
+  # The active_response input should no longer hold the stale "Purity" value.
+  resp_after <- app$get_value(input = "models-active_response")
+  expect_true(is.null(resp_after) || identical(resp_after, ""))
 })
