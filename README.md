@@ -83,6 +83,8 @@ Sessions can be saved and loaded as `.rds` files. Use **Finalize** to create a p
 
 For live development, the app auto-detects source mode (DESCRIPTION + R/ present) and uses `pkgload::load_all()` instead of the installed package. Just restart the app to pick up code changes.
 
+State-management architecture and contributor guidance are documented in [STATE_MANAGEMENT.md](STATE_MANAGEMENT.md). Read that before changing shared `rv` fields, reset/load behavior, or cross-module state flows.
+
 ```r
 # Run from source (no install needed)
 shiny::runApp("inst/app", port = 4564)

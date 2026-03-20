@@ -400,20 +400,6 @@ server <- function(input, output, session) {
   })
 
   # ── Role-Based Reactive Helpers ────────────────────────────────────────
-  reset_downstream <- function() {
-    defs <- make_default_rv()
-    clear_formula_state(rv)
-    clear_model_state(rv)
-    # Design layer
-    rv$design_metadata       <- defs$design_metadata
-    rv$design_model_formula  <- defs$design_model_formula
-    rv$design_alias_formula  <- defs$design_alias_formula
-    rv$alias_threshold       <- defs$alias_threshold
-    rv$sim_data              <- defs$sim_data
-    # UI layer
-    rv$selected_obs    <- defs$selected_obs
-  }
-
   responses      <- reactive({ names(Filter(function(r) r == "Response",  rv$roles)) })
   factors_       <- reactive({ names(Filter(function(r) r == "Factor",    rv$roles)) })
   covariates     <- reactive({ names(Filter(function(r) r == "Covariate", rv$roles)) })
@@ -493,8 +479,7 @@ server <- function(input, output, session) {
 
   # Data modules
   mod_assign_roles_server("assign_roles", rv = rv,
-                          analysis_mode = reactive(input$analysis_mode),
-                          reset_downstream = reset_downstream)
+                          analysis_mode = reactive(input$analysis_mode))
 
   # Shared navigation callback
   navigate_to <- function(tab) {
@@ -510,7 +495,6 @@ server <- function(input, output, session) {
                                       role_selectors = role_selectors,
                                       shared_reactives = shared_reactives,
                                       analysis_mode = reactive(input$analysis_mode),
-                                      reset_downstream = reset_downstream,
                                       colour_theme = colour_theme,
                                       available_terms = available_terms)
 
@@ -530,7 +514,6 @@ server <- function(input, output, session) {
                          analysis_mode = reactive(input$analysis_mode),
                          navigate_to = navigate_to,
                          set_analysis_mode = set_analysis_mode,
-                         reset_downstream = reset_downstream,
                          fit_models = function(formulas) models_exports$do_fit_models(formulas),
                          models_exports = models_exports,
                          design_exports = design_exports)
@@ -539,7 +522,6 @@ server <- function(input, output, session) {
                            analysis_mode = reactive(input$analysis_mode),
                            navigate_to = navigate_to,
                            set_analysis_mode = set_analysis_mode,
-                           reset_downstream = reset_downstream,
                            colour_theme = colour_theme,
                            design_exports = design_exports)
 

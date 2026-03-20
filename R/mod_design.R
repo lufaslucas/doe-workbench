@@ -339,6 +339,7 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
                               available_terms) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+    syncing_ui <- shiny::reactiveVal(FALSE)
 
     # Convenience aliases — role selectors
     responses       <- role_selectors$responses
@@ -380,22 +381,31 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
     # User edits these text/numeric inputs → write to canonical shared state.
     # ignoreInit avoids overwriting loaded/auto-filled values on module startup.
     observeEvent(input$alias_full_formula, {
+      if (isTRUE(syncing_ui())) return()
       if (isTRUE(rv$read_only)) return()
       set_design_model_formula(rv, input$alias_full_formula)
+      apply_design_spec_change(rv)
     }, ignoreInit = TRUE)
 
     observeEvent(input$alias_check_formula, {
+      if (isTRUE(syncing_ui())) return()
       if (isTRUE(rv$read_only)) return()
       set_design_alias_formula(rv, input$alias_check_formula)
+      apply_design_spec_change(rv)
     }, ignoreInit = TRUE)
 
     observeEvent(input$alias_threshold, {
+      if (isTRUE(syncing_ui())) return()
       if (isTRUE(rv$read_only)) return()
       set_alias_threshold(rv, input$alias_threshold)
+      apply_design_spec_change(rv)
     }, ignoreInit = TRUE)
 
-    # Helper: push canonical rv state into the UI text/numeric controls
+    # Helper: push canonical rv state into the UI text/numeric controls.
+    # Raises syncing_ui flag so input observers don't fire back.
     sync_design_ui <- function() {
+      syncing_ui(TRUE)
+      on.exit(syncing_ui(FALSE), add = TRUE)
       updateTextInput(session, "alias_full_formula",  value = rv$design_model_formula)
       updateTextInput(session, "alias_check_formula", value = rv$design_alias_formula)
       updateNumericInput(session, "alias_threshold",  value = rv$alias_threshold)

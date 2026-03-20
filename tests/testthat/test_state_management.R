@@ -339,3 +339,308 @@ test_that("clear_model_state resets fitted outputs and MC settings to defaults",
   expect_equal(shiny::isolate(rv$model_errors), list())
   expect_equal(shiny::isolate(rv$excluded_obs), list())
 })
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Phase 4: Scoped invalidation helpers (Ticket 1)
+# ═══════════════════════════════════════════════════════════════════════════
+
+test_that("invalidate_design_outputs clears only design-layer fields", {
+  rv <- do.call(shiny::reactiveValues, make_default_rv())
+
+  # Set design state
+  rv$design_metadata      <- list(design_type = "factorial")
+  rv$design_model_formula <- "A + B"
+  rv$design_alias_formula <- "A + B + A:B"
+  rv$alias_threshold      <- 0.90
+  rv$sim_data             <- data.frame(x = 1:3)
+  # Set model state (should NOT be touched)
+  rv$formulas <- c("Y ~ A" = "Y ~ A")
+  rv$models   <- list("Y ~ A" = lm(mpg ~ wt, data = mtcars))
+
+  shiny::isolate(invalidate_design_outputs(rv))
+
+  # Design fields reset
+  expect_equal(shiny::isolate(rv$design_metadata), list())
+  expect_equal(shiny::isolate(rv$design_model_formula), "")
+  expect_equal(shiny::isolate(rv$design_alias_formula), "")
+  expect_equal(shiny::isolate(rv$alias_threshold), ALIAS_CORR_THRESH)
+  expect_null(shiny::isolate(rv$sim_data))
+  # Model fields preserved
+  expect_equal(shiny::isolate(rv$formulas), c("Y ~ A" = "Y ~ A"))
+  expect_equal(length(shiny::isolate(rv$models)), 1)
+})
+
+test_that("invalidate_formula_outputs clears formulas and bumps gen, preserves models", {
+  rv <- do.call(shiny::reactiveValues, make_default_rv())
+
+  rv$formulas         <- c("Y ~ A" = "Y ~ A", "Y ~ B" = "Y ~ B")
+  rv$formula_gen      <- 5L
+  rv$formula_aliases  <- list("Y ~ A" = data.frame(T1 = "X", T2 = "Z"))
+  rv$alias_labels     <- list(A = "A + B")
+  rv$inestimable_terms <- "A:B"
+  rv$skip_auto_formula <- TRUE
+  # Model state (should NOT be touched)
+  rv$models <- list("Y ~ A" = lm(mpg ~ wt, data = mtcars))
+
+  shiny::isolate(invalidate_formula_outputs(rv))
+
+  expect_equal(shiny::isolate(rv$formulas), character(0))
+  expect_equal(shiny::isolate(rv$formula_gen), 6L)
+  expect_equal(shiny::isolate(rv$formula_aliases), list())
+  expect_equal(shiny::isolate(rv$alias_labels), list())
+  expect_equal(shiny::isolate(rv$inestimable_terms), character(0))
+  expect_false(shiny::isolate(rv$skip_auto_formula))
+  # Models NOT cleared by formula invalidation alone
+  expect_equal(length(shiny::isolate(rv$models)), 1)
+})
+
+test_that("invalidate_model_outputs clears fitted state but preserves MC config", {
+  rv <- do.call(shiny::reactiveValues, make_default_rv())
+
+  rv$models       <- list("Y ~ A" = lm(mpg ~ wt, data = mtcars))
+  rv$vif_df       <- data.frame(Term = "wt", M1 = 1.2)
+  rv$prune_notes  <- list("Y ~ A" = "pruned")
+  rv$model_notes  <- list("Y ~ A" = list(warnings = "warn"))
+  rv$model_errors <- list("Y ~ B" = "error")
+  rv$excluded_obs <- list("Y ~ A" = 3L)
+  # MC config (should NOT be touched)
+  rv$mc_on      <- TRUE
+  rv$mc_alpha   <- 0.10
+  rv$mc_terms   <- c("A")
+  rv$mc_methods <- c("tukey")
+
+  shiny::isolate(invalidate_model_outputs(rv))
+
+  # Model fields reset
+  expect_equal(shiny::isolate(rv$models), list())
+  expect_equal(shiny::isolate(rv$vif_df), data.frame())
+  expect_equal(shiny::isolate(rv$prune_notes), list())
+  expect_equal(shiny::isolate(rv$model_notes), list())
+  expect_equal(shiny::isolate(rv$model_errors), list())
+  expect_equal(shiny::isolate(rv$excluded_obs), list())
+  # MC config preserved
+  expect_true(shiny::isolate(rv$mc_on))
+  expect_equal(shiny::isolate(rv$mc_alpha), 0.10)
+  expect_equal(shiny::isolate(rv$mc_terms), c("A"))
+  expect_equal(shiny::isolate(rv$mc_methods), c("tukey"))
+})
+
+test_that("invalidate_mc_outputs full=TRUE clears results and config", {
+  rv <- do.call(shiny::reactiveValues, make_default_rv())
+
+  rv$mc_results <- list(res = data.frame(term = "A"))
+  rv$mc_on      <- TRUE
+  rv$mc_alpha   <- 0.10
+  rv$mc_terms   <- c("A", "B")
+  rv$mc_methods <- c("tukey", "dunnett")
+
+  shiny::isolate(invalidate_mc_outputs(rv, full = TRUE))
+
+  expect_equal(shiny::isolate(rv$mc_results), list())
+  expect_false(shiny::isolate(rv$mc_on))
+  expect_equal(shiny::isolate(rv$mc_alpha), ALPHA_DEFAULT)
+  expect_equal(shiny::isolate(rv$mc_terms), character(0))
+  expect_equal(shiny::isolate(rv$mc_methods), character(0))
+})
+
+test_that("invalidate_mc_outputs full=FALSE clears results only, preserves config", {
+  rv <- do.call(shiny::reactiveValues, make_default_rv())
+
+  rv$mc_results <- list(res = data.frame(term = "A"))
+  rv$mc_on      <- TRUE
+  rv$mc_alpha   <- 0.10
+  rv$mc_terms   <- c("A")
+  rv$mc_methods <- c("tukey")
+
+  shiny::isolate(invalidate_mc_outputs(rv, full = FALSE))
+
+  expect_equal(shiny::isolate(rv$mc_results), list())
+  # Config preserved
+  expect_true(shiny::isolate(rv$mc_on))
+  expect_equal(shiny::isolate(rv$mc_alpha), 0.10)
+  expect_equal(shiny::isolate(rv$mc_terms), c("A"))
+  expect_equal(shiny::isolate(rv$mc_methods), c("tukey"))
+})
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Phase 4: Action functions (Ticket 2)
+# ═══════════════════════════════════════════════════════════════════════════
+
+test_that("apply_data_change invalidates design + formulas + models + MC + selection", {
+  rv <- do.call(shiny::reactiveValues, make_default_rv())
+
+  # Populate every layer
+  rv$design_metadata      <- list(type = "factorial")
+  rv$design_model_formula <- "A + B"
+  rv$formulas             <- c("Y ~ A" = "Y ~ A")
+  rv$formula_gen          <- 3L
+  rv$models               <- list("Y ~ A" = lm(mpg ~ wt, data = mtcars))
+  rv$mc_results           <- list(r = data.frame(x = 1))
+  rv$mc_on                <- TRUE
+  rv$selected_obs         <- c(1L, 3L)
+
+  shiny::isolate(apply_data_change(rv))
+
+  # All downstream cleared
+  expect_equal(shiny::isolate(rv$design_metadata), list())
+  expect_equal(shiny::isolate(rv$design_model_formula), "")
+  expect_equal(shiny::isolate(rv$formulas), character(0))
+  expect_equal(shiny::isolate(rv$formula_gen), 4L)  # bumped
+
+  expect_equal(shiny::isolate(rv$models), list())
+  expect_equal(shiny::isolate(rv$mc_results), list())
+  expect_false(shiny::isolate(rv$mc_on))
+  expect_null(shiny::isolate(rv$selected_obs))
+})
+
+test_that("apply_role_change has same cascade as apply_data_change", {
+  rv <- do.call(shiny::reactiveValues, make_default_rv())
+
+  rv$design_model_formula <- "A + B"
+  rv$formulas             <- c("Y ~ A" = "Y ~ A")
+  rv$models               <- list("Y ~ A" = lm(mpg ~ wt, data = mtcars))
+  rv$mc_on                <- TRUE
+  rv$selected_obs         <- c(2L)
+
+  shiny::isolate(apply_role_change(rv))
+
+  expect_equal(shiny::isolate(rv$design_model_formula), "")
+  expect_equal(shiny::isolate(rv$formulas), character(0))
+  expect_equal(shiny::isolate(rv$models), list())
+  expect_false(shiny::isolate(rv$mc_on))
+  expect_null(shiny::isolate(rv$selected_obs))
+})
+
+test_that("apply_design_spec_change only clears sim_data, preserves models", {
+  rv <- do.call(shiny::reactiveValues, make_default_rv())
+
+  rv$sim_data <- data.frame(x = 1:5)
+  rv$models   <- list("Y ~ A" = lm(mpg ~ wt, data = mtcars))
+  rv$formulas <- c("Y ~ A" = "Y ~ A")
+
+  shiny::isolate(apply_design_spec_change(rv))
+
+  expect_null(shiny::isolate(rv$sim_data))
+  # Models and formulas preserved
+  expect_equal(length(shiny::isolate(rv$models)), 1)
+  expect_equal(shiny::isolate(rv$formulas), c("Y ~ A" = "Y ~ A"))
+})
+
+test_that("apply_model_spec_change invalidates formulas + models + MC, preserves design", {
+  rv <- do.call(shiny::reactiveValues, make_default_rv())
+
+  rv$design_model_formula <- "A + B"
+  rv$formulas             <- c("Y ~ A" = "Y ~ A")
+  rv$formula_gen          <- 2L
+  rv$models               <- list("Y ~ A" = lm(mpg ~ wt, data = mtcars))
+  rv$mc_results           <- list(r = data.frame(x = 1))
+
+  shiny::isolate(apply_model_spec_change(rv))
+
+  # Formulas + models cleared
+  expect_equal(shiny::isolate(rv$formulas), character(0))
+  expect_equal(shiny::isolate(rv$formula_gen), 3L)
+  expect_equal(shiny::isolate(rv$models), list())
+  expect_equal(shiny::isolate(rv$mc_results), list())
+  # Design preserved
+  expect_equal(shiny::isolate(rv$design_model_formula), "A + B")
+})
+
+test_that("apply_generated_formulas writes atomically and invalidates models", {
+  rv <- do.call(shiny::reactiveValues, make_default_rv())
+
+  rv$models      <- list("Y ~ A" = lm(mpg ~ wt, data = mtcars))
+  rv$formula_gen <- 1L
+  rv$mc_results  <- list(r = data.frame(x = 1))
+  rv$mc_on       <- TRUE  # MC config should be preserved
+
+  formulas <- c("Y ~ A + B" = "Y ~ A + B")
+  aliases  <- list("Y ~ A + B" = data.frame(T1 = "A", T2 = "B"))
+  labels   <- list(A = "A + B")
+
+  shiny::isolate(apply_generated_formulas(rv, formulas,
+                                          aliases = aliases,
+                                          alias_labels = labels,
+                                          inestimable = "C"))
+
+  # Formula metadata written atomically
+  expect_equal(shiny::isolate(rv$formulas), formulas)
+  expect_equal(shiny::isolate(rv$formula_aliases), aliases)
+  expect_equal(shiny::isolate(rv$alias_labels), labels)
+  expect_equal(shiny::isolate(rv$inestimable_terms), "C")
+  expect_equal(shiny::isolate(rv$formula_gen), 2L)
+  # Models invalidated (stale)
+  expect_equal(shiny::isolate(rv$models), list())
+  # MC results cleared but config preserved
+  expect_equal(shiny::isolate(rv$mc_results), list())
+  expect_true(shiny::isolate(rv$mc_on))
+})
+
+test_that("apply_fitted_models writes atomically and clears MC results only", {
+  rv <- do.call(shiny::reactiveValues, make_default_rv())
+
+  rv$mc_results <- list(old = data.frame(x = 1))
+  rv$mc_on      <- TRUE
+  rv$mc_terms   <- c("A")
+  rv$formulas   <- c("Y ~ A" = "Y ~ A")  # should be preserved
+
+  m <- lm(mpg ~ wt, data = mtcars)
+  vif <- data.frame(Term = "wt", M1 = 1.5)
+
+  shiny::isolate(apply_fitted_models(rv,
+                                     models = list("Y ~ wt" = m),
+                                     errors = list(),
+                                     notes  = list("Y ~ wt" = list()),
+                                     vif_df = vif))
+
+  expect_equal(length(shiny::isolate(rv$models)), 1)
+  expect_equal(shiny::isolate(rv$model_errors), list())
+  expect_equal(shiny::isolate(rv$vif_df), vif)
+  # MC results cleared, config preserved
+  expect_equal(shiny::isolate(rv$mc_results), list())
+  expect_true(shiny::isolate(rv$mc_on))
+  expect_equal(shiny::isolate(rv$mc_terms), c("A"))
+  # Formulas preserved
+  expect_equal(shiny::isolate(rv$formulas), c("Y ~ A" = "Y ~ A"))
+})
+
+test_that("apply_mc_config_change clears only MC results", {
+  rv <- do.call(shiny::reactiveValues, make_default_rv())
+
+  rv$mc_results <- list(old = data.frame(x = 1))
+  rv$models     <- list("Y ~ A" = lm(mpg ~ wt, data = mtcars))
+  rv$formulas   <- c("Y ~ A" = "Y ~ A")
+
+  shiny::isolate(apply_mc_config_change(rv))
+
+  expect_equal(shiny::isolate(rv$mc_results), list())
+  # Models and formulas preserved
+  expect_equal(length(shiny::isolate(rv$models)), 1)
+  expect_equal(shiny::isolate(rv$formulas), c("Y ~ A" = "Y ~ A"))
+})
+
+test_that("backward-compatible aliases: clear_formula_state delegates to invalidate_formula_outputs", {
+  rv <- do.call(shiny::reactiveValues, make_default_rv())
+
+  rv$formulas    <- c("Y ~ A" = "Y ~ A")
+  rv$formula_gen <- 10L
+
+  shiny::isolate(clear_formula_state(rv))
+
+  expect_equal(shiny::isolate(rv$formulas), character(0))
+  expect_equal(shiny::isolate(rv$formula_gen), 11L)
+})
+
+test_that("backward-compatible aliases: clear_model_state clears models + MC fully", {
+  rv <- do.call(shiny::reactiveValues, make_default_rv())
+
+  rv$models     <- list("Y ~ A" = lm(mpg ~ wt, data = mtcars))
+  rv$mc_on      <- TRUE
+  rv$mc_results <- list(r = data.frame(x = 1))
+
+  shiny::isolate(clear_model_state(rv))
+
+  expect_equal(shiny::isolate(rv$models), list())
+  expect_equal(shiny::isolate(rv$mc_results), list())
+  expect_false(shiny::isolate(rv$mc_on))
+})

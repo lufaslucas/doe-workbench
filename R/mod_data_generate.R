@@ -69,7 +69,7 @@ mod_data_generate_ui <- function(id) {
 
 # ── Server ───────────────────────────────────────────────────────────────────
 mod_data_generate_server <- function(id, rv, analysis_mode, navigate_to,
-                                      set_analysis_mode, reset_downstream,
+                                      set_analysis_mode,
                                       colour_theme, design_exports) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
@@ -618,7 +618,7 @@ mod_data_generate_server <- function(id, rv, analysis_mode, navigate_to,
         df$Response <- round(rnorm(nrow(df), mean = 0, sd = 1), 4)
       }
 
-      reset_downstream()
+      apply_data_change(rv)
       rv$data <- stamp_row_ids(df)
       rv$transforms    <- list()
       rv$coding_values <- list()
@@ -804,8 +804,7 @@ mod_data_generate_server <- function(id, rv, analysis_mode, navigate_to,
           }
 
           if (length(default_formulas) > 0) {
-            clear_formula_state(rv)
-            rv$formulas <- default_formulas
+            apply_generated_formulas(rv, default_formulas)
           }
         }
       }

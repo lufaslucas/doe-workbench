@@ -94,7 +94,7 @@ mod_assign_roles_ui <- function(id) {
 }
 
 # ── Server ───────────────────────────────────────────────────────────────────
-mod_assign_roles_server <- function(id, rv, analysis_mode, reset_downstream) {
+mod_assign_roles_server <- function(id, rv, analysis_mode) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -225,7 +225,7 @@ mod_assign_roles_server <- function(id, rv, analysis_mode, reset_downstream) {
         updateSelectInput(session, paste0("role_", cn), selected = new_role)
         n <- n + 1
       }
-      reset_downstream()
+      apply_role_change(rv)
       showNotification(
         paste0("Set all ", n, " columns to '", new_role, "'."),
         type = "message", duration = 3)
@@ -252,7 +252,7 @@ mod_assign_roles_server <- function(id, rv, analysis_mode, reset_downstream) {
           n <- n + 1
         }
       }
-      reset_downstream()
+      apply_role_change(rv)
       type_label <- if (action == "factor_ignore") "factor/character" else "numeric"
       showNotification(
         paste0("Set ", n, " ", type_label, " column(s) to 'Ignore'."),
@@ -325,7 +325,7 @@ mod_assign_roles_server <- function(id, rv, analysis_mode, reset_downstream) {
           updateSelectInput(session, paste0("transform_", cn), selected = new_tr)
         }
       }
-      reset_downstream()
+      apply_role_change(rv)
     }, ignoreInit = TRUE)
 
     # ── Bulk transformation: factors ─────────────────────────────────────
@@ -349,7 +349,7 @@ mod_assign_roles_server <- function(id, rv, analysis_mode, reset_downstream) {
           }
         }
       }
-      reset_downstream()
+      apply_role_change(rv)
       label <- switch(tr, "coding_fixed" = "coding (\u22121/+1 custom range)", tr)
       showNotification(
         paste0("Applied '", label, "' transform to all numeric factors.",
@@ -378,7 +378,7 @@ mod_assign_roles_server <- function(id, rv, analysis_mode, reset_downstream) {
           }
         }
       }
-      reset_downstream()
+      apply_role_change(rv)
       label <- switch(tr, "coding_fixed" = "coding (\u22121/+1 custom range)", tr)
       showNotification(
         paste0("Applied '", label, "' transform to all numeric covariates.",

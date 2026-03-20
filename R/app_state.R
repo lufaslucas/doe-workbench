@@ -1,15 +1,46 @@
 # R/app_state.R — State management helpers
-# Centralised setters and clearers for rv (reactiveValues) fields.
-# Extracted from utils.R + new Model spec setters.
+# Centralised setters, invalidation helpers, and action functions for rv
+# (reactiveValues) fields. All upstream state changes should go through the
+# named action functions defined here so invalidation is scoped and auditable.
+#
+# ═══════════════════════════════════════════════════════════════════════════
+# INVALIDATION MATRIX
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Upstream change          | Invalidates                                   | Action function
+# ─────────────────────────┼───────────────────────────────────────────────┼──────────────────────────
+# Data load / generate     | design, formulas, models, MC, UI selection   | apply_data_change()
+# Role / type / transform  | (same cascade as data change)                | apply_role_change()
+# Analysis mode switch     | (same cascade as role change)                | apply_role_change()
+# Design spec change       | design outputs only (models NOT touched)     | apply_design_spec_change()
+# Model spec change        | formulas, models, MC  (design NOT touched)   | apply_model_spec_change()
+# Formula generation       | models, MC results  (spec & design preserved)| apply_generated_formulas()
+# Model fitting            | MC results only  (formulas & spec preserved) | apply_fitted_models()
+# MC config change         | MC results only  (models preserved)          | apply_mc_config_change()
+#
+# Each invalidation helper below is scoped to clear ONLY the fields it owns.
+# Action functions compose these helpers to implement the rules above.
+# ═══════════════════════════════════════════════════════════════════════════
 
 # ---------------------------------------------------------------------------
-# State-clearing helpers
-# Centralised routines so modules don't need to know every field name.
+# Ticket 1: Scoped invalidation helpers (composable building blocks)
 # ---------------------------------------------------------------------------
 
-#' Clear all formula-related state on rv.
-#' Call when formulas are regenerated or data/roles change.
-clear_formula_state <- function(rv) {
+#' Invalidate design-layer outputs (metadata, sim data, design formulas).
+#' Does NOT touch model formulas or fitted results.
+invalidate_design_outputs <- function(rv) {
+  defs <- make_default_rv()
+  rv$design_metadata      <- defs$design_metadata
+  rv$design_model_formula <- defs$design_model_formula
+  rv$design_alias_formula <- defs$design_alias_formula
+  rv$alias_threshold      <- defs$alias_threshold
+  rv$sim_data             <- defs$sim_data
+  invisible(rv)
+}
+
+#' Invalidate generated formulas and their associated metadata.
+#' Bumps formula_gen to signal downstream reactives.
+invalidate_formula_outputs <- function(rv) {
   defs <- make_default_rv()
   rv$formulas                 <- defs$formulas
   rv$formula_gen              <- rv$formula_gen + 1L
@@ -21,21 +52,135 @@ clear_formula_state <- function(rv) {
   invisible(rv)
 }
 
-#' Clear all fitted-model state on rv (including MC settings).
-#' Call when models need to be invalidated (e.g., formulas changed).
-clear_model_state <- function(rv) {
+#' Invalidate fitted models, VIF, diagnostics, prune notes, and outlier state.
+#' Does NOT clear MC config (mc_on, mc_alpha, mc_terms, mc_methods).
+invalidate_model_outputs <- function(rv) {
   defs <- make_default_rv()
   rv$models       <- defs$models
-  rv$mc_results   <- defs$mc_results
-  rv$mc_on        <- defs$mc_on
-  rv$mc_alpha     <- defs$mc_alpha
-  rv$mc_terms     <- defs$mc_terms
-  rv$mc_methods   <- defs$mc_methods
   rv$vif_df       <- defs$vif_df
   rv$prune_notes  <- defs$prune_notes
   rv$model_notes  <- defs$model_notes
   rv$model_errors <- defs$model_errors
   rv$excluded_obs <- defs$excluded_obs
+  invisible(rv)
+}
+
+#' Invalidate multiple-comparisons results and config.
+#' When full = TRUE (default), also resets MC config (on/alpha/terms/methods).
+#' When full = FALSE, only clears computed MC results.
+invalidate_mc_outputs <- function(rv, full = TRUE) {
+  defs <- make_default_rv()
+  rv$mc_results <- defs$mc_results
+  if (full) {
+    rv$mc_on      <- defs$mc_on
+    rv$mc_alpha   <- defs$mc_alpha
+    rv$mc_terms   <- defs$mc_terms
+    rv$mc_methods <- defs$mc_methods
+  }
+  invisible(rv)
+}
+
+# ---------------------------------------------------------------------------
+# Backward-compatible aliases (delegate to new helpers)
+# ---------------------------------------------------------------------------
+
+#' Clear all formula-related state on rv.
+#' @seealso invalidate_formula_outputs
+clear_formula_state <- function(rv) {
+  invalidate_formula_outputs(rv)
+}
+
+#' Clear all fitted-model state on rv (including MC settings).
+#' @seealso invalidate_model_outputs, invalidate_mc_outputs
+clear_model_state <- function(rv) {
+  invalidate_model_outputs(rv)
+  invalidate_mc_outputs(rv, full = TRUE)
+  invisible(rv)
+}
+
+# ---------------------------------------------------------------------------
+# Ticket 2: Action functions for upstream state changes
+# ---------------------------------------------------------------------------
+
+#' Action: new data was loaded/generated.
+#' Clears ALL downstream state (design, formulas, models, MC, UI selection).
+#' Does NOT set rv$data/roles/col_types — caller handles that.
+apply_data_change <- function(rv) {
+  invalidate_design_outputs(rv)
+  invalidate_formula_outputs(rv)
+  invalidate_model_outputs(rv)
+  invalidate_mc_outputs(rv, full = TRUE)
+  rv$selected_obs <- NULL
+  invisible(rv)
+}
+
+#' Action: roles, types, or transforms changed.
+#' Same cascade as data change (everything downstream is stale).
+#' @seealso apply_data_change
+apply_role_change <- function(rv) {
+  apply_data_change(rv)
+}
+
+#' Action: Design spec changed (formula/threshold edits within Design tab).
+#' Only invalidates design-derived outputs; Models remain untouched.
+apply_design_spec_change <- function(rv) {
+  # Design formula changes do NOT propagate to Models unless explicitly pushed.
+  # Only reset sim_data since the alias structure may have changed.
+  rv$sim_data <- NULL
+  invisible(rv)
+}
+
+#' Action: Model builder spec changed (response, max_way, etc.).
+#' Invalidates generated formulas and everything downstream.
+apply_model_spec_change <- function(rv) {
+  invalidate_formula_outputs(rv)
+  invalidate_model_outputs(rv)
+  invalidate_mc_outputs(rv, full = TRUE)
+  invisible(rv)
+}
+
+#' Action: formulas were generated (or re-generated).
+#' Writes formulas + alias metadata atomically, then invalidates fitted state.
+#' @param formulas Named character vector of formulas.
+#' @param aliases List of alias data frames per formula.
+#' @param alias_labels Named list of alias label mappings.
+#' @param inestimable Character vector of inestimable terms.
+apply_generated_formulas <- function(rv, formulas, aliases = list(),
+                                     alias_labels = list(),
+                                     inestimable = character()) {
+  rv$formulas         <- formulas
+  rv$formula_aliases  <- aliases
+  rv$alias_labels     <- alias_labels
+  rv$inestimable_terms <- inestimable
+  rv$formula_gen      <- rv$formula_gen + 1L
+  # Fitted models are now stale
+
+  invalidate_model_outputs(rv)
+  invalidate_mc_outputs(rv, full = FALSE)
+  invisible(rv)
+}
+
+#' Action: models were fitted.
+#' Writes fitted models + diagnostics atomically. Clears stale MC results.
+#' @param models Named list of fitted model objects.
+#' @param errors Named list of fitting errors.
+#' @param notes Named list of model notes/warnings.
+#' @param vif_df VIF summary data frame (or NULL to compute later).
+apply_fitted_models <- function(rv, models, errors = list(),
+                                notes = list(), vif_df = NULL) {
+  rv$models       <- models
+  rv$model_errors <- errors
+  rv$model_notes  <- notes
+  if (!is.null(vif_df)) rv$vif_df <- vif_df
+  # Previous MC results are stale (different models)
+  invalidate_mc_outputs(rv, full = FALSE)
+  invisible(rv)
+}
+
+#' Action: MC config changed (but models are unchanged).
+#' Only clears MC results; models and formulas remain intact.
+apply_mc_config_change <- function(rv) {
+  rv$mc_results <- make_default_rv()$mc_results
   invisible(rv)
 }
 

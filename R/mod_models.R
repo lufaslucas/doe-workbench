@@ -122,10 +122,11 @@ mod_models_ui <- function(id) {
 
 # ── Server ───────────────────────────────────────────────────────────────────
 mod_models_server <- function(id, rv, role_selectors, shared_reactives,
-                              analysis_mode, reset_downstream,
+                              analysis_mode,
                               colour_theme, available_terms) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+    syncing_ui <- shiny::reactiveVal(FALSE)
     # Unpack role selectors for convenience
     responses      <- role_selectors$responses
     factors_       <- role_selectors$factors_
@@ -202,55 +203,113 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
     })
 
     # ── Sync MC inputs to rv ─────────────────────────────────────────────
-    observeEvent(input$mc_on, { if (isTRUE(rv$read_only)) return(); rv$mc_on <- input$mc_on }, ignoreInit = TRUE)
-    observeEvent(input$mc_alpha_sidebar, { if (isTRUE(rv$read_only)) return(); rv$mc_alpha <- input$mc_alpha_sidebar }, ignoreInit = TRUE)
-    observeEvent(input$mc_terms, { if (isTRUE(rv$read_only)) return(); rv$mc_terms <- input$mc_terms }, ignoreInit = TRUE)
-    observeEvent(input$mc_method, { if (isTRUE(rv$read_only)) return(); rv$mc_methods <- input$mc_method }, ignoreInit = TRUE)
+    # Write config then invalidate stale MC results via action function.
+    observeEvent(input$mc_on, {
+      if (isTRUE(syncing_ui())) return()
+      if (isTRUE(rv$read_only)) return()
+      rv$mc_on <- input$mc_on
+      apply_mc_config_change(rv)
+    }, ignoreInit = TRUE)
+    observeEvent(input$mc_alpha_sidebar, {
+      if (isTRUE(syncing_ui())) return()
+      if (isTRUE(rv$read_only)) return()
+      rv$mc_alpha <- input$mc_alpha_sidebar
+      apply_mc_config_change(rv)
+    }, ignoreInit = TRUE)
+    observeEvent(input$mc_terms, {
+      if (isTRUE(syncing_ui())) return()
+      if (isTRUE(rv$read_only)) return()
+      rv$mc_terms <- input$mc_terms
+      apply_mc_config_change(rv)
+    }, ignoreInit = TRUE)
+    observeEvent(input$mc_method, {
+      if (isTRUE(syncing_ui())) return()
+      if (isTRUE(rv$read_only)) return()
+      rv$mc_methods <- input$mc_method
+      apply_mc_config_change(rv)
+    }, ignoreInit = TRUE)
 
     # ── Sync builder inputs to canonical rv state ──────────────────────────
     # All writes go through setter helpers (app_state.R) for validation/clamping.
     observeEvent(input$active_response, {
-      set_model_active_response(rv, input$active_response)
+      if (isTRUE(syncing_ui())) return()
+      new_val <- input$active_response
+      if (identical(new_val, rv$model_active_response)) return()
+      set_model_active_response(rv, new_val)
+      apply_model_spec_change(rv)
     }, ignoreInit = TRUE)
     observeEvent(input$custom_formula, {
+      if (isTRUE(syncing_ui())) return()
       if (isTRUE(rv$read_only)) return()
       set_model_custom_formula(rv, input$custom_formula)
     }, ignoreInit = TRUE)
     observeEvent(input$max_way, {
+      if (isTRUE(syncing_ui())) return()
       if (isTRUE(rv$read_only)) return()
-      set_model_max_way(rv, input$max_way)
+      new_val <- as.integer(input$max_way %||% MAX_WAY_DEFAULT)
+      if (identical(new_val, as.integer(rv$model_max_way %||% MAX_WAY_DEFAULT))) return()
+      set_model_max_way(rv, new_val)
+      apply_model_spec_change(rv)
     }, ignoreInit = TRUE)
     observeEvent(input$poly_degree, {
+      if (isTRUE(syncing_ui())) return()
       if (isTRUE(rv$read_only)) return()
-      set_model_poly_degree(rv, input$poly_degree)
+      new_val <- as.integer(input$poly_degree %||% POLY_DEGREE_DEFAULT)
+      if (identical(new_val, as.integer(rv$model_poly_degree %||% POLY_DEGREE_DEFAULT))) return()
+      set_model_poly_degree(rv, new_val)
+      apply_model_spec_change(rv)
     }, ignoreInit = TRUE)
     observeEvent(input$include_covariates, {
+      if (isTRUE(syncing_ui())) return()
       if (isTRUE(rv$read_only)) return()
-      set_model_include_covariates(rv, input$include_covariates)
+      new_val <- isTRUE(input$include_covariates)
+      if (identical(new_val, isTRUE(rv$model_include_covariates))) return()
+      set_model_include_covariates(rv, new_val)
+      apply_model_spec_change(rv)
     }, ignoreInit = TRUE)
     observeEvent(input$formula_covariates, {
+      if (isTRUE(syncing_ui())) return()
       if (isTRUE(rv$read_only)) return()
-      set_model_formula_covariates(rv, input$formula_covariates)
+      new_val <- input$formula_covariates %||% character(0)
+      if (identical(sort(new_val), sort(rv$model_formula_covariates %||% character(0)))) return()
+      set_model_formula_covariates(rv, new_val)
+      apply_model_spec_change(rv)
     }, ignoreInit = TRUE)
     observeEvent(input$max_covariates_per_formula, {
+      if (isTRUE(syncing_ui())) return()
       if (isTRUE(rv$read_only)) return()
-      set_model_max_covariates_per_formula(rv, input$max_covariates_per_formula)
+      new_val <- as.integer(input$max_covariates_per_formula %||% 1L)
+      if (identical(new_val, as.integer(rv$model_max_covariates_per_formula %||% 1L))) return()
+      set_model_max_covariates_per_formula(rv, new_val)
+      apply_model_spec_change(rv)
     }, ignoreInit = TRUE)
     observeEvent(input$include_cov_fac, {
+      if (isTRUE(syncing_ui())) return()
       if (isTRUE(rv$read_only)) return()
+      if (identical(isTRUE(input$include_cov_fac), isTRUE(rv$model_include_cov_fac))) return()
       set_model_include_cov_fac(rv, input$include_cov_fac)
+      apply_model_spec_change(rv)
     }, ignoreInit = TRUE)
     observeEvent(input$include_blocks, {
+      if (isTRUE(syncing_ui())) return()
       if (isTRUE(rv$read_only)) return()
+      if (identical(isTRUE(input$include_blocks), isTRUE(rv$model_include_blocks))) return()
       set_model_include_blocks(rv, input$include_blocks)
+      apply_model_spec_change(rv)
     }, ignoreInit = TRUE)
     observeEvent(input$include_block_fac, {
+      if (isTRUE(syncing_ui())) return()
       if (isTRUE(rv$read_only)) return()
+      if (identical(isTRUE(input$include_block_fac), isTRUE(rv$model_include_block_fac))) return()
       set_model_include_block_fac(rv, input$include_block_fac)
+      apply_model_spec_change(rv)
     }, ignoreInit = TRUE)
     observeEvent(input$append_formulas, {
+      if (isTRUE(syncing_ui())) return()
       if (isTRUE(rv$read_only)) return()
+      if (identical(isTRUE(input$append_formulas), isTRUE(rv$model_append_formulas))) return()
       set_model_append_formulas(rv, input$append_formulas)
+      apply_model_spec_change(rv)
     }, ignoreInit = TRUE)
 
     # ── Active response selector ─────────────────────────────────────────
@@ -481,7 +540,6 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
         formulas <- c(existing, new_only)
       }
 
-      rv$formula_gen <- isolate(rv$formula_gen) + 1L
       rv$pending_alias_resolution <- NULL
 
       # Compute aliases for each formula
@@ -492,18 +550,17 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
       }
 
       # Collapse aliased terms: remove redundant terms, build labels
+      computed_labels <- list()
       if (length(aliases) > 0) {
         collapsed <- collapse_aliased_formulas(formulas, aliases)
         formulas <- collapsed$formulas
-        rv$alias_labels <- collapsed$alias_labels
+        computed_labels <- collapsed$alias_labels
         # Re-detect aliases on collapsed formulas (should be clean now)
         aliases <- list()
         for (f in formulas) {
           af <- tryCatch(detect_formula_aliases(rv$data, f), error = function(e) data.frame())
           if (nrow(af) > 0) aliases[[f]] <- af
         }
-      } else {
-        rv$alias_labels <- list()
       }
 
       # Detect inestimable terms across all formulas
@@ -512,10 +569,12 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
         inest <- detect_inestimable_terms(f, rv$data)
         all_inest <- union(all_inest, inest)
       }
-      rv$inestimable_terms <- all_inest
 
-      rv$formulas <- formulas
-      rv$formula_aliases <- aliases
+      # Atomic write: formulas + aliases + labels + inestimable + gen counter
+      apply_generated_formulas(rv, formulas,
+                               aliases = aliases,
+                               alias_labels = computed_labels,
+                               inestimable = all_inest)
     }
 
     # ── Reactive formula generation ──────────────────────────────────────
@@ -739,10 +798,33 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
                              coding_values = rv$coding_values,
                              weight_column = wt_col,
                              level_labels = rv$level_labels)
-        rv$models <- result$models
-        rv$model_errors <- result$errors
-        rv$model_notes <- check_model_notes(rv$models)
+        fitted_notes <- check_model_notes(result$models)
         incProgress(0.4)
+
+        # Compute VIF before writing to rv
+        computed_vif <- vif_summary(result$models)
+        if (nrow(computed_vif) > 0) {
+          model_cols <- setdiff(names(computed_vif), "Term")
+          vif_vals <- computed_vif[, model_cols, drop = FALSE]
+          high_mask <- apply(vif_vals, c(1,2), function(x) !is.na(x) && x > sqrt(5))
+          if (any(high_mask)) {
+            terms_flagged <- computed_vif$Term[apply(high_mask, 1, any)]
+            showNotification(
+              paste0("Collinearity detected (VIF): ",
+                     paste(terms_flagged, collapse = ", "),
+                     ". Check the Collinearity tab in Results."),
+              type = "warning", duration = 10)
+          }
+        }
+
+        incProgress(0.3)
+
+        # Atomic write: models + errors + notes + VIF; clears stale MC results
+        apply_fitted_models(rv,
+                            models = result$models,
+                            errors = result$errors,
+                            notes  = fitted_notes,
+                            vif_df = computed_vif)
 
         # Update MC term choices (local module input)
         all_terms_raw <- unique(unlist(lapply(rv$models, function(m) {
@@ -765,24 +847,6 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
         cat_factor_terms <- cat_factor_terms[order(-n_parts, cat_factor_terms)]
         updateCheckboxGroupInput(session, "mc_terms",
                                  choices = cat_factor_terms, selected = cat_factor_terms)
-
-        incProgress(0.3)
-
-        # Compute VIF
-        rv$vif_df <- vif_summary(rv$models)
-        if (nrow(rv$vif_df) > 0) {
-          model_cols <- setdiff(names(rv$vif_df), "Term")
-          vif_vals <- rv$vif_df[, model_cols, drop = FALSE]
-          high_mask <- apply(vif_vals, c(1,2), function(x) !is.na(x) && x > sqrt(5))
-          if (any(high_mask)) {
-            terms_flagged <- rv$vif_df$Term[apply(high_mask, 1, any)]
-            showNotification(
-              paste0("Collinearity detected (VIF): ",
-                     paste(terms_flagged, collapse = ", "),
-                     ". Check the Collinearity tab in Results."),
-              type = "warning", duration = 10)
-          }
-        }
 
         incProgress(0.3)
       })
@@ -1128,6 +1192,8 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
 
     # ── Reset module UI to startup defaults ────────────────────────────
     reset_ui <- function() {
+      syncing_ui(TRUE)
+      on.exit(syncing_ui(FALSE), add = TRUE)
       # Reset model spec to defaults, then sync UI
       clear_model_spec(rv)
       sync_ui_from_rv()
@@ -1139,6 +1205,8 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
 
     # ── Sync module UI to current rv state (e.g. after session load) ────
     sync_ui_from_rv <- function() {
+      syncing_ui(TRUE)
+      on.exit(syncing_ui(FALSE), add = TRUE)
       # Builder controls — response selector
       # Contract: NULL means "not yet set, use first available response".
       # Resolve NULL/invalid to a concrete value in rv before syncing UI,

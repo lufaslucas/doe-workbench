@@ -46,7 +46,7 @@ mod_data_upload_ui <- function(id) {
 
 # ── Server ───────────────────────────────────────────────────────────────────
 mod_data_upload_server <- function(id, rv, analysis_mode, navigate_to,
-                                   set_analysis_mode, reset_downstream,
+                                   set_analysis_mode,
                                    fit_models, models_exports, design_exports) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
@@ -118,7 +118,7 @@ mod_data_upload_server <- function(id, rv, analysis_mode, navigate_to,
       rv$transforms    <- list()
       rv$coding_values <- list()
       rv$level_labels  <- list()
-      reset_downstream()
+      apply_data_change(rv)
 
       if (is_template && !is.null(template_roles) && nrow(template_roles) > 0) {
         # Restore roles, types, transforms, coding values from template
@@ -216,7 +216,7 @@ mod_data_upload_server <- function(id, rv, analysis_mode, navigate_to,
     observeEvent(input$load_example, {
       if (is_locked(rv, "Example loading")) return()
       choice <- input$example_choice %||% "rcbd"
-      reset_downstream()
+      apply_data_change(rv)
 
       # Auto-switch analysis mode for regression examples
       if (choice %in% c("fracfact", "ccd", "historical")) {
@@ -668,8 +668,7 @@ mod_data_upload_server <- function(id, rv, analysis_mode, navigate_to,
       }
 
       if (length(default_formulas) > 0) {
-        clear_formula_state(rv)
-        rv$formulas <- default_formulas
+        apply_generated_formulas(rv, default_formulas)
         # Pre-populate custom formula input via models callback
         models_exports$set_custom_formula(unname(default_formulas[1]))
         # Auto-fit default models so results are immediately available
