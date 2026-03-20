@@ -376,6 +376,31 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
       toggle(ns("add_balance_covariates"))
     })
 
+    # ── Input → rv observers (Design spec ownership) ───────────────────
+    # User edits these text/numeric inputs → write to canonical shared state.
+    # ignoreInit avoids overwriting loaded/auto-filled values on module startup.
+    observeEvent(input$alias_full_formula, {
+      if (isTRUE(rv$read_only)) return()
+      set_design_model_formula(rv, input$alias_full_formula)
+    }, ignoreInit = TRUE)
+
+    observeEvent(input$alias_check_formula, {
+      if (isTRUE(rv$read_only)) return()
+      set_design_alias_formula(rv, input$alias_check_formula)
+    }, ignoreInit = TRUE)
+
+    observeEvent(input$alias_threshold, {
+      if (isTRUE(rv$read_only)) return()
+      set_alias_threshold(rv, input$alias_threshold)
+    }, ignoreInit = TRUE)
+
+    # Helper: push canonical rv state into the UI text/numeric controls
+    sync_design_ui <- function() {
+      updateTextInput(session, "alias_full_formula",  value = rv$design_model_formula)
+      updateTextInput(session, "alias_check_formula", value = rv$design_alias_formula)
+      updateNumericInput(session, "alias_threshold",  value = rv$alias_threshold)
+    }
+
     # ── Download Design Template (Excel with 3 sheets) ─────────────────
     output$download_design_template <- downloadHandler(
       filename = function() {
@@ -424,7 +449,7 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
           )
         }
         # Also include design model formula if set
-        design_f <- input$alias_full_formula %||% ""
+        design_f <- rv$design_model_formula
         if (nzchar(design_f) && !design_f %in% formulas_df$Formula) {
           formulas_df <- rbind(
             data.frame(Label = "Design Model", Formula = design_f, stringsAsFactors = FALSE),
@@ -633,7 +658,7 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
 
       } else if (mode == "effects") {
         # Effects mode: one column per degree of freedom via model.matrix()
-        full_str  <- input$alias_full_formula %||% ""
+        full_str  <- rv$design_model_formula
         if (nchar(trimws(full_str)) == 0)
           return(DT::datatable(data.frame(Message = "Enter a model formula in the Design Model panel above.")))
 
@@ -691,8 +716,8 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
 
       } else {
         # Model or Alias mode: build expanded model matrix (one col per term)
-        full_str  <- input$alias_full_formula %||% ""
-        check_str <- input$alias_check_formula %||% ""
+        full_str  <- rv$design_model_formula
+        check_str <- rv$design_alias_formula
 
         if (nchar(trimws(full_str)) == 0)
           return(DT::datatable(data.frame(Message = "Enter a model formula in the Design Model panel above.")))
@@ -793,7 +818,7 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
       } else if (sel == "blocks") {
         blocks()
       } else if (sel == "model") {
-        full_str <- input$alias_full_formula %||% ""
+        full_str <- rv$design_model_formula
         if (nchar(trimws(full_str)) == 0) return(character(0))
         terms <- trimws(strsplit(full_str, "\\+")[[1]])
         # Extract base variable names from terms (split interactions)
@@ -958,8 +983,8 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
       resp <- models_exports$get_active_response() %||% "Y"
 
       # Build formula from the radio button scope
-      model_str <- trimws(input$alias_full_formula %||% "")
-      alias_str <- trimws(input$alias_check_formula %||% "")
+      model_str <- trimws(rv$design_model_formula)
+      alias_str <- trimws(rv$design_alias_formula)
 
       if (scope == "alias") {
         # Model + alias: combine both formula inputs
@@ -1000,7 +1025,7 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
       }
 
       # Determine model-only terms vs alias terms for separator line
-      full_str <- input$alias_full_formula %||% ""
+      full_str <- rv$design_model_formula
       model_only_terms <- if (nchar(trimws(full_str)) > 0) {
         trimws(strsplit(full_str, "\\+")[[1]])
       } else model_terms
@@ -1321,16 +1346,16 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
       if (isTRUE(rv$read_only)) return()
       term <- input$model_term_click$term
       if (is.null(term)) return()
-      current <- input$alias_full_formula %||% ""
+      current <- rv$design_model_formula
       if (nchar(trimws(current)) == 0) {
-        updateTextInput(session, "alias_full_formula", value = term)
+        set_design_model_formula(rv, term)
       } else {
         existing <- trimws(strsplit(current, "\\+")[[1]])
         if (!term %in% existing) {
-          updateTextInput(session, "alias_full_formula",
-                          value = paste0(current, " + ", term))
+          set_design_model_formula(rv, paste0(current, " + ", term))
         }
       }
+      updateTextInput(session, "alias_full_formula", value = rv$design_model_formula)
     })
 
     # Observer: when any alias term button is clicked, append to alias formula
@@ -1338,16 +1363,16 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
       if (isTRUE(rv$read_only)) return()
       term <- input$alias_term_click$term
       if (is.null(term)) return()
-      current <- input$alias_check_formula %||% ""
+      current <- rv$design_alias_formula
       if (nchar(trimws(current)) == 0) {
-        updateTextInput(session, "alias_check_formula", value = term)
+        set_design_alias_formula(rv, term)
       } else {
         existing <- trimws(strsplit(current, "\\+")[[1]])
         if (!term %in% existing) {
-          updateTextInput(session, "alias_check_formula",
-                          value = paste0(current, " + ", term))
+          set_design_alias_formula(rv, paste0(current, " + ", term))
         }
       }
+      updateTextInput(session, "alias_check_formula", value = rv$design_alias_formula)
     })
 
     # Render custom formula term chooser buttons (for Models tab — rendered here,
@@ -1400,8 +1425,6 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
       }
       if (length(blks) > 0) full_parts <- c(full_parts, blks)
       if (length(covs) > 0) full_parts <- c(full_parts, covs)
-      updateTextInput(session, "alias_full_formula",
-                      value = paste(full_parts, collapse = " + "))
 
       # Alias model: all factor interactions + block x factor
       check_parts <- facs
@@ -1418,8 +1441,12 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
       if (length(covs) > 0)
         check_parts <- c(check_parts, covs,
                           as.vector(outer(covs, facs, function(cv, f) paste0(cv, ":", f))))
-      updateTextInput(session, "alias_check_formula",
-                      value = paste(check_parts, collapse = " + "))
+
+      # Write canonical state first, then sync UI
+      set_design_spec(rv,
+        model_formula = paste(full_parts, collapse = " + "),
+        alias_formula = paste(check_parts, collapse = " + "))
+      sync_design_ui()
     }
 
     # Reset to defaults on button click
@@ -1427,8 +1454,8 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
 
     # Clear alias formulas when data changes, then auto-fill if roles exist
     observeEvent(rv$data, {
-      updateTextInput(session, "alias_full_formula", value = "")
-      updateTextInput(session, "alias_check_formula", value = "")
+      set_design_spec(rv, model_formula = "", alias_formula = "")
+      sync_design_ui()
       if (length(factors_()) > 0) auto_fill_alias()
     }, ignoreInit = TRUE)
 
@@ -1437,7 +1464,7 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
     observeEvent(observe_main_nav(), {
       if (observe_main_nav() == "Design") {
         isolate({
-          if (nchar(trimws(input$alias_full_formula %||% "")) == 0 && length(factors_()) > 0)
+          if (nchar(rv$design_model_formula) == 0 && length(factors_()) > 0)
             auto_fill_alias()
         })
       }
@@ -1446,9 +1473,9 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
     # Alias Structure table
     output$alias_table <- DT::renderDataTable({
       req(rv$data)
-      full_str  <- input$alias_full_formula  %||% ""
-      check_str <- input$alias_check_formula %||% ""
-      threshold <- input$alias_threshold %||% 0.99
+      full_str  <- rv$design_model_formula
+      check_str <- rv$design_alias_formula
+      threshold <- rv$alias_threshold
 
       if (nchar(trimws(full_str)) == 0)
         return(DT::datatable(data.frame(Message = "Enter a full model formula.")))
@@ -1470,9 +1497,9 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
     # Show "Send to Models" buttons when fully aliased pairs exist
     output$alias_push_formulas_ui <- renderUI({
       req(rv$data)
-      full_str  <- input$alias_full_formula  %||% ""
-      check_str <- input$alias_check_formula %||% ""
-      threshold <- input$alias_threshold %||% 0.99
+      full_str  <- rv$design_model_formula
+      check_str <- rv$design_alias_formula
+      threshold <- rv$alias_threshold
       if (nchar(trimws(full_str)) == 0) return(NULL)
 
       full_terms  <- trimws(strsplit(full_str, "\\+")[[1]])
@@ -1548,9 +1575,9 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
     observeEvent(input$alias_push_removed, {
       if (is_locked(rv, "Alias push")) return()
       req(rv$data)
-      full_str  <- input$alias_full_formula %||% ""
-      threshold <- input$alias_threshold %||% 0.99
-      check_str <- input$alias_check_formula %||% ""
+      full_str  <- rv$design_model_formula
+      threshold <- rv$alias_threshold
+      check_str <- rv$design_alias_formula
       full_terms  <- trimws(strsplit(full_str, "\\+")[[1]])
       full_terms  <- full_terms[nchar(full_terms) > 0]
       check_terms <- if (nchar(trimws(check_str)) > 0)
@@ -1573,9 +1600,9 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
     observeEvent(input$alias_push_combined, {
       if (is_locked(rv, "Alias push")) return()
       req(rv$data)
-      full_str  <- input$alias_full_formula %||% ""
-      threshold <- input$alias_threshold %||% 0.99
-      check_str <- input$alias_check_formula %||% ""
+      full_str  <- rv$design_model_formula
+      threshold <- rv$alias_threshold
+      check_str <- rv$design_alias_formula
       full_terms  <- trimws(strsplit(full_str, "\\+")[[1]])
       full_terms  <- full_terms[nchar(full_terms) > 0]
       check_terms <- if (nchar(trimws(check_str)) > 0)
@@ -1607,7 +1634,7 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
     # ── Power Analysis ─────────────────────────────────────────────────────
     # Extract model terms from formula (shared helper for power analysis)
     power_model_terms <- reactive({
-      full_str <- input$alias_full_formula %||% ""
+      full_str <- rv$design_model_formula
       if (nchar(trimws(full_str)) > 0) {
         terms <- trimws(strsplit(full_str, "\\+")[[1]])
         terms[nchar(terms) > 0]
@@ -1684,9 +1711,9 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
     # ── Design Summary ────────────────────────────────────────────────────
     output$design_summary_ui <- renderUI({
       req(rv$data)
-      full_str  <- input$alias_full_formula %||% ""
-      check_str <- input$alias_check_formula %||% ""
-      threshold <- input$alias_threshold %||% 0.99
+      full_str  <- rv$design_model_formula
+      check_str <- rv$design_alias_formula
+      threshold <- rv$alias_threshold
 
       if (nchar(trimws(full_str)) == 0)
         return(p(class = "text-muted", "Enter a model formula above to see the design summary."))
@@ -1734,7 +1761,7 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
 
     # Dynamic UI: model term effect inputs
     output$sim_model_effects_ui <- renderUI({
-      full_str <- input$alias_full_formula %||% ""
+      full_str <- rv$design_model_formula
       if (nchar(trimws(full_str)) == 0)
         return(p(class = "text-muted", "Enter a model formula above."))
 
@@ -1760,7 +1787,7 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
 
     # Save model effects when they change
     observe({
-      full_str <- input$alias_full_formula %||% ""
+      full_str <- rv$design_model_formula
       model_terms <- trimws(strsplit(full_str, "\\+")[[1]])
       model_terms <- model_terms[nchar(model_terms) > 0]
       for (i in seq_along(model_terms)) {
@@ -1771,8 +1798,8 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
 
     # Dynamic UI: alias term effect inputs
     output$sim_alias_effects_ui <- renderUI({
-      full_str <- input$alias_full_formula %||% ""
-      check_str <- input$alias_check_formula %||% ""
+      full_str <- rv$design_model_formula
+      check_str <- rv$design_alias_formula
       if (nchar(trimws(full_str)) == 0 || nchar(trimws(check_str)) == 0)
         return(p(class = "text-muted", "Enter both formulas above."))
 
@@ -1797,8 +1824,8 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
 
     # Save alias effects when they change
     observe({
-      full_str <- input$alias_full_formula %||% ""
-      check_str <- input$alias_check_formula %||% ""
+      full_str <- rv$design_model_formula
+      check_str <- rv$design_alias_formula
       model_terms <- trimws(strsplit(full_str, "\\+")[[1]])
       check_terms <- trimws(strsplit(check_str, "\\+")[[1]])
       alias_only <- setdiff(check_terms, model_terms)
@@ -1812,8 +1839,8 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
     # Real effects table (updates reactively as inputs change)
     output$sim_real_effects_table <- DT::renderDataTable({
       req(rv$data)
-      full_str <- input$alias_full_formula %||% ""
-      check_str <- input$alias_check_formula %||% ""
+      full_str <- rv$design_model_formula
+      check_str <- rv$design_alias_formula
       if (nchar(trimws(full_str)) == 0)
         return(DT::datatable(data.frame(Message = "Enter a model formula above.")))
 
@@ -1913,7 +1940,7 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
     observeEvent(input$sim_apply_all_model, {
       if (isTRUE(rv$read_only)) return()
       val <- input$sim_set_all_model %||% 0
-      full_str <- input$alias_full_formula %||% ""
+      full_str <- rv$design_model_formula
       model_terms <- trimws(strsplit(full_str, "\\+")[[1]])
       model_terms <- model_terms[nchar(model_terms) > 0]
       for (i in seq_along(model_terms))
@@ -1923,8 +1950,8 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
     observeEvent(input$sim_apply_all_alias, {
       if (isTRUE(rv$read_only)) return()
       val <- input$sim_set_all_alias %||% 0
-      full_str <- input$alias_full_formula %||% ""
-      check_str <- input$alias_check_formula %||% ""
+      full_str <- rv$design_model_formula
+      check_str <- rv$design_alias_formula
       model_terms <- trimws(strsplit(full_str, "\\+")[[1]])
       check_terms <- trimws(strsplit(check_str, "\\+")[[1]])
       alias_only <- setdiff(check_terms, model_terms)
@@ -1937,8 +1964,8 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
     observeEvent(input$sim_run, {
       if (is_locked(rv, "Simulation")) return()
       req(rv$data)
-      full_str <- input$alias_full_formula %||% ""
-      check_str <- input$alias_check_formula %||% ""
+      full_str <- rv$design_model_formula
+      check_str <- rv$design_alias_formula
       if (nchar(trimws(full_str)) == 0) {
         showNotification("Enter a model formula first.", type = "warning")
         return()
@@ -1998,8 +2025,8 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
     # Effect breakdown table: per-observation per-term decomposition
     output$sim_breakdown_table <- DT::renderDataTable({
       req(rv$data, rv$sim_data)
-      full_str <- input$alias_full_formula %||% ""
-      check_str <- input$alias_check_formula %||% ""
+      full_str <- rv$design_model_formula
+      check_str <- rv$design_alias_formula
       req(nchar(trimws(full_str)) > 0)
 
       model_terms <- trimws(strsplit(full_str, "\\+")[[1]])
@@ -2492,9 +2519,9 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
 
     # ── Reset module UI to startup defaults ────────────────────────────
     reset_ui <- function() {
-      updateTextInput(session, "alias_full_formula", value = "")
-      updateTextInput(session, "alias_check_formula", value = "")
-      updateNumericInput(session, "alias_threshold", value = ALIAS_CORR_THRESH)
+      # Design spec fields: reset through rv, then sync UI
+      sync_design_ui()
+      # Visual-only defaults (not in rv)
       updateRadioButtons(session, "design_matrix_mode", selected = "coded")
       updateSliderInput(session, "splom_jitter", value = JITTER_DEFAULT)
       updateSliderInput(session, "design_2d_jitter", value = JITTER_DEFAULT)
@@ -2510,11 +2537,14 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
     # ── Return exports for use by other modules ──────────────────────────
     list(
       set_alias_full_formula = function(text) {
-        updateTextInput(session, "alias_full_formula", value = text)
+        set_design_model_formula(rv, text)
+        updateTextInput(session, "alias_full_formula", value = rv$design_model_formula)
       },
       set_alias_check_formula = function(text) {
-        updateTextInput(session, "alias_check_formula", value = text)
+        set_design_alias_formula(rv, text)
+        updateTextInput(session, "alias_check_formula", value = rv$design_alias_formula)
       },
+      sync_ui_from_rv = sync_design_ui,
       reset_ui = reset_ui
     )
   })
