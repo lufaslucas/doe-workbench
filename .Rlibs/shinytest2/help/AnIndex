@@ -1,0 +1,15 @@
+AppDriver	AppDriver
+compare_screenshot_threshold	compare_screenshot_threshold
+get_input_processors	register_input_processor
+load_app_env	load_app_env
+load_app_support	app_support
+local_app_support	app_support
+migrate_from_shinytest	migrate_from_shinytest
+platform_variant	platform_variant
+record_test	record_test
+register_input_processor	register_input_processor
+screenshot_max_difference	compare_screenshot_threshold
+test_app	test_app
+use_shinytest2	use_shinytest2
+use_shinytest2_test	use_shinytest2
+with_app_support	app_support

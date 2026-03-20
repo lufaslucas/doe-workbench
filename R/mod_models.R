@@ -207,9 +207,66 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
     observeEvent(input$mc_terms, { if (isTRUE(rv$read_only)) return(); rv$mc_terms <- input$mc_terms }, ignoreInit = TRUE)
     observeEvent(input$mc_method, { if (isTRUE(rv$read_only)) return(); rv$mc_methods <- input$mc_method }, ignoreInit = TRUE)
 
+    # ── Sync builder inputs to canonical rv state ──────────────────────────
+    # All writes go through setter helpers (app_state.R) for validation/clamping.
+    observeEvent(input$active_response, {
+      set_model_active_response(rv, input$active_response)
+    }, ignoreInit = TRUE)
+    observeEvent(input$custom_formula, {
+      if (isTRUE(rv$read_only)) return()
+      set_model_custom_formula(rv, input$custom_formula)
+    }, ignoreInit = TRUE)
+    observeEvent(input$max_way, {
+      if (isTRUE(rv$read_only)) return()
+      set_model_max_way(rv, input$max_way)
+    }, ignoreInit = TRUE)
+    observeEvent(input$poly_degree, {
+      if (isTRUE(rv$read_only)) return()
+      set_model_poly_degree(rv, input$poly_degree)
+    }, ignoreInit = TRUE)
+    observeEvent(input$include_covariates, {
+      if (isTRUE(rv$read_only)) return()
+      set_model_include_covariates(rv, input$include_covariates)
+    }, ignoreInit = TRUE)
+    observeEvent(input$formula_covariates, {
+      if (isTRUE(rv$read_only)) return()
+      set_model_formula_covariates(rv, input$formula_covariates)
+    }, ignoreInit = TRUE)
+    observeEvent(input$max_covariates_per_formula, {
+      if (isTRUE(rv$read_only)) return()
+      set_model_max_covariates_per_formula(rv, input$max_covariates_per_formula)
+    }, ignoreInit = TRUE)
+    observeEvent(input$include_cov_fac, {
+      if (isTRUE(rv$read_only)) return()
+      set_model_include_cov_fac(rv, input$include_cov_fac)
+    }, ignoreInit = TRUE)
+    observeEvent(input$include_blocks, {
+      if (isTRUE(rv$read_only)) return()
+      set_model_include_blocks(rv, input$include_blocks)
+    }, ignoreInit = TRUE)
+    observeEvent(input$include_block_fac, {
+      if (isTRUE(rv$read_only)) return()
+      set_model_include_block_fac(rv, input$include_block_fac)
+    }, ignoreInit = TRUE)
+    observeEvent(input$append_formulas, {
+      if (isTRUE(rv$read_only)) return()
+      set_model_append_formulas(rv, input$append_formulas)
+    }, ignoreInit = TRUE)
+
     # ── Active response selector ─────────────────────────────────────────
+    # When the list of response columns changes, update choices and preserve
+    # the canonical selection (rv$model_active_response) if still valid.
+    # If invalid or NULL, fall back to first available and write back to rv
+    # so canonical state and UI always agree.
     observe({
-      updateSelectInput(session, "active_response", choices = responses())
+      resps <- responses()
+      sel   <- rv$model_active_response
+      if (is.null(sel) || !(sel %in% resps)) {
+        sel <- if (length(resps) > 0) resps[1] else NULL
+        rv$model_active_response <- sel
+      }
+      updateSelectInput(session, "active_response", choices = resps,
+                        selected = sel %||% "")
     })
 
     # ── Weight column selector ─────────────────────────────────────────
@@ -226,14 +283,21 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
       if (length(covs) == 0) {
         return(checkboxInput(ns("include_covariates"), "Include covariates", value = FALSE))
       }
+      # Use canonical rv state for defaults; fall back to sensible startup values
+      inc_cov <- isTRUE(rv$model_include_covariates)
+      sel_covs <- rv$model_formula_covariates
+      if (length(sel_covs) == 0) sel_covs <- covs
+      sel_covs <- intersect(sel_covs, covs)  # only valid columns
+      if (length(sel_covs) == 0) sel_covs <- covs
+      max_cov <- rv$model_max_covariates_per_formula %||% 1L
       tagList(
-        checkboxInput(ns("include_covariates"), "Include covariates", value = TRUE),
+        checkboxInput(ns("include_covariates"), "Include covariates", value = inc_cov),
         conditionalPanel(
           condition = paste0("input['", ns("include_covariates"), "'] == true"),
           checkboxGroupInput(ns("formula_covariates"), "Covariates to include",
-                             choices = covs, selected = covs, inline = TRUE),
+                             choices = covs, selected = sel_covs, inline = TRUE),
           numericInput(ns("max_covariates_per_formula"), "Max covariates per formula",
-                       value = 1, min = 1, max = max(1, length(covs)), step = 1)
+                       value = max_cov, min = 1, max = max(1, length(covs)), step = 1)
         )
       )
     })
@@ -362,50 +426,52 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
 
     # ── Formula generation logic (shared by auto-observer & button) ─────
     generate_formulas <- function() {
-      req(input$active_response, rv$data)
+      response <- rv$model_active_response %||% input$active_response
+      req(response, rv$data)
 
       mode <- analysis_mode() %||% "comparative"
-      max_way <- input$max_way %||% 2L
+      max_way <- rv$model_max_way %||% MAX_WAY_DEFAULT
 
       # Filter covariates to user-selected subset
-      sel_covs <- if (isTRUE(input$include_covariates)) {
-        input$formula_covariates %||% all_covariates()
+      sel_covs <- if (isTRUE(rv$model_include_covariates)) {
+        fc <- rv$model_formula_covariates
+        if (length(fc) == 0) all_covariates() else fc
       } else {
         character(0)
       }
-      max_cov <- input$max_covariates_per_formula %||% 1L
+      max_cov <- rv$model_max_covariates_per_formula %||% 1L
 
       formulas <- if (mode == "regression") {
         req(length(factors_()) > 0 || length(all_covariates()) > 0)
         build_regression_formulas(
-          response          = input$active_response,
+          response          = response,
           factors           = factors_(),
           covariates        = sel_covs,
           blocks            = blocks(),
           max_way           = max_way,
-          poly_degree       = input$poly_degree %||% 2,
+          poly_degree       = rv$model_poly_degree %||% POLY_DEGREE_DEFAULT,
           include_covariates = length(sel_covs) > 0,
-          include_cov_fac    = isTRUE(input$include_cov_fac),
-          include_blocks     = isTRUE(input$include_blocks),
-          include_block_fac  = isTRUE(input$include_block_fac),
+          include_cov_fac    = isTRUE(rv$model_include_cov_fac),
+          include_blocks     = isTRUE(rv$model_include_blocks),
+          include_block_fac  = isTRUE(rv$model_include_block_fac),
           max_covariates     = max_cov
         )
       } else {
         req(length(factors_()) > 0)
         build_formulas(
-          response          = input$active_response,
+          response          = response,
           factors           = factors_(),
           covariates        = sel_covs,
           blocks            = blocks(),
           max_way           = max_way,
           include_covariates = length(sel_covs) > 0,
-          include_blocks     = isTRUE(input$include_blocks),
-          include_block_fac  = isTRUE(input$include_block_fac),
+          include_blocks     = isTRUE(rv$model_include_blocks),
+          include_block_fac  = isTRUE(rv$model_include_block_fac),
           max_covariates     = max_cov
         )
       }
       # Append mode: merge with existing formulas (skip duplicates)
-      if (isTRUE(input$append_formulas) && length(rv$formulas) > 0) {
+      if (isTRUE(rv$model_append_formulas) && length(rv$formulas) > 0) {
         existing <- rv$formulas
         new_only <- setdiff(formulas, existing)
         if (length(new_only) == 0) {
@@ -457,18 +523,20 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
     # IMPORTANT: all formula-builder inputs are read BEFORE the skip check
     # so they register as reactive dependencies even on the first (skipped) run.
     observe({
-      req(input$active_response, rv$data)
+      req(rv$model_active_response, rv$data)
 
-      # Touch all formula-builder inputs to register dependencies
+      # Touch canonical model-spec state to register dependencies
       analysis_mode()
-      input$max_way
-      input$include_covariates
-      input$formula_covariates
-      input$max_covariates_per_formula
-      input$poly_degree
-      input$include_cov_fac
-      input$include_blocks
-      input$include_block_fac
+      rv$model_active_response
+      rv$model_max_way
+      rv$model_include_covariates
+      rv$model_formula_covariates
+      rv$model_max_covariates_per_formula
+      rv$model_poly_degree
+      rv$model_include_cov_fac
+      rv$model_include_blocks
+      rv$model_include_block_fac
+      rv$model_append_formulas
       factors_()
       blocks()
       all_covariates()
@@ -1060,15 +1128,10 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
 
     # ── Reset module UI to startup defaults ────────────────────────────
     reset_ui <- function() {
-      updateTextAreaInput(session, "custom_formula", value = "")
-      updateNumericInput(session, "max_way", value = MAX_WAY_DEFAULT)
-      updateNumericInput(session, "poly_degree", value = POLY_DEGREE_DEFAULT)
-      updateCheckboxInput(session, "include_cov_fac", value = FALSE)
-      updateCheckboxInput(session, "include_blocks", value = TRUE)
-      updateCheckboxInput(session, "include_block_fac", value = FALSE)
-      updateCheckboxInput(session, "append_formulas", value = FALSE)
-      updateCheckboxInput(session, "mc_on", value = FALSE)
-      updateNumericInput(session, "mc_alpha_sidebar", value = ALPHA_DEFAULT)
+      # Reset model spec to defaults, then sync UI
+      clear_model_spec(rv)
+      sync_ui_from_rv()
+      # Also reset ephemeral controls not in spec
       updateNumericInput(session, "prune_alpha", value = ALPHA_DEFAULT)
       updateSelectInput(session, "model_type", selected = "lm")
       updateSelectInput(session, "weight_column", selected = "")
@@ -1076,6 +1139,38 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
 
     # ── Sync module UI to current rv state (e.g. after session load) ────
     sync_ui_from_rv <- function() {
+      # Builder controls — response selector
+      # Contract: NULL means "not yet set, use first available response".
+      # Resolve NULL/invalid to a concrete value in rv before syncing UI,
+      # so canonical state and visible control always agree.
+      resps <- responses()
+      sel_resp <- rv$model_active_response
+      if (is.null(sel_resp) || !(sel_resp %in% resps)) {
+        sel_resp <- if (length(resps) > 0) resps[1] else NULL
+        rv$model_active_response <- sel_resp
+      }
+      updateSelectInput(session, "active_response", choices = resps,
+                        selected = sel_resp %||% "")
+      updateTextAreaInput(session, "custom_formula", value = rv$model_custom_formula %||% "")
+      updateNumericInput(session, "max_way", value = rv$model_max_way %||% MAX_WAY_DEFAULT)
+      updateNumericInput(session, "poly_degree", value = rv$model_poly_degree %||% POLY_DEGREE_DEFAULT)
+      updateCheckboxInput(session, "include_covariates", value = isTRUE(rv$model_include_covariates))
+      # Covariate selection + max: only update if covariates exist
+      covs <- all_covariates()
+      if (length(covs) > 0) {
+        sel_covs <- rv$model_formula_covariates %||% character(0)
+        sel_covs <- intersect(sel_covs, covs)
+        if (length(sel_covs) == 0) sel_covs <- covs
+        updateCheckboxGroupInput(session, "formula_covariates",
+                                 choices = covs, selected = sel_covs)
+        updateNumericInput(session, "max_covariates_per_formula",
+                           value = rv$model_max_covariates_per_formula %||% 1L)
+      }
+      updateCheckboxInput(session, "include_cov_fac", value = isTRUE(rv$model_include_cov_fac))
+      updateCheckboxInput(session, "include_blocks", value = isTRUE(rv$model_include_blocks))
+      updateCheckboxInput(session, "include_block_fac", value = isTRUE(rv$model_include_block_fac))
+      updateCheckboxInput(session, "append_formulas", value = isTRUE(rv$model_append_formulas))
+      # MC controls
       updateCheckboxInput(session, "mc_on", value = isTRUE(rv$mc_on))
       updateNumericInput(session, "mc_alpha_sidebar", value = rv$mc_alpha %||% ALPHA_DEFAULT)
       # mc_terms choices depend on fitted models; rebuild choices then select saved
@@ -1118,10 +1213,11 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
     list(
       do_fit_models = do_fit_models,
       set_custom_formula = function(text) {
-        updateTextAreaInput(session, "custom_formula", value = text)
+        set_model_custom_formula(rv, text)
+        updateTextAreaInput(session, "custom_formula", value = rv$model_custom_formula)
       },
-      get_custom_formula = reactive({ input$custom_formula }),
-      get_active_response = reactive({ input$active_response }),
+      get_custom_formula = reactive({ rv$model_custom_formula %||% input$custom_formula }),
+      get_active_response = reactive({ rv$model_active_response %||% input$active_response }),
       reset_ui = reset_ui,
       sync_ui_from_rv = sync_ui_from_rv
     )

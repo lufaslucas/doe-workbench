@@ -43,6 +43,32 @@ Imports:
     digest,
     openxlsx,
     pkgload
+Collate:
+    'config.R'
+    'utils.R'
+    'app_state.R'
+    'doe_registry.R'
+    'report_codegen.R'
+    'run_app.R'
+    'stat_anova.R'
+    'stat_design.R'
+    'stat_effects.R'
+    'stat_formulas.R'
+    'stat_model_interface.R'
+    'stat_models.R'
+    'stat_robustness.R'
+    'ui_helpers.R'
+    'mod_assign_roles.R'
+    'mod_data_generate.R'
+    'mod_data_upload.R'
+    'mod_design.R'
+    'mod_explore.R'
+    'mod_models.R'
+    'mod_report.R'
+    'mod_results.R'
+    'mod_results_residuals.R'
+    'mod_results_robustness.R'
+    'zzz.R'
 Suggests:
     officedown,
     tinytex,

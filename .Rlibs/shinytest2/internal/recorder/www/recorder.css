@@ -1,0 +1,289 @@
+html,body {
+  /* Comment the font-size to revert text to be same height as checkboxes */
+  font-size: 12px;
+  width: 100%;
+  height:100%;
+  font-family: "Lucida Sans", "DejaVu Sans", "Lucida Grande", "Segoe UI",
+               Verdana, Helvetica, sans-serif;
+}
+#shiny-recorder .btn {
+  font-size: 12px;
+}
+
+#app-iframe-container {
+  border: none;
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  right: 300px;
+}
+
+#app-iframe {
+  border: 0px;
+  border-right: solid 1px #d6dadc;
+  width: 100%;
+  height: 100%;
+}
+
+#shiny-recorder {
+  border: none;
+  position: fixed;
+  width: 300px;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-flex-flow: column;
+  flex-flow: column;
+}
+
+#shiny-recorder .shiny-recorder-header {
+  -webkit-flex: 0 0 auto; /* Needed for QT webkit and old versions of Safari */
+  font-size: 11px;
+  color: #000;
+  background: #d6dadd;
+  font-weight: bold;
+  padding: 5px 0.7em;
+}
+
+#shiny-recorder .shiny-recorder-controls {
+  -webkit-flex: 0 0 auto; /* Needed for QT webkit and old versions of Safari */
+  padding: 0.4em 0.7em;
+  background: #f6f7f9;
+}
+#shiny-recorder .shiny-recorder-controls .btn {
+  margin: 0.2em 0;
+}
+
+#shiny-recorder #save-and-quit {
+  background: #f6f7f9;
+  padding: 0.7em;
+  padding-top: 0;
+}
+
+#shiny-recorder #save-and-quit #exit_save {
+  background-color: #e7fee7;
+  float:right;
+}
+#shiny-recorder #save-and-quit #exit_save:not(.disabled):hover {
+  background-color: #d9f8d9;
+}
+
+#shiny-recorder #save-and-quit #exit_nosave {
+  background-color: #ffebeb;
+  float:left;
+}
+#shiny-recorder #save-and-quit #exit_nosave:hover {
+  background-color: #f3dbdb;
+}
+
+#shiny-recorder .btn {
+  margin: 0 0 0 0;
+  height: 32px;
+  padding: 6px;
+}
+#shiny-recorder #values img {
+  margin-top: -2.5px;
+}
+/* #shiny-recorder #values {
+  margin: 0.8em 0;
+} */
+
+/* #shiny-recorder .shiny-recorder-controls .inline-input-container {
+  display: inline-block;
+} */
+#shiny-recorder .shiny-recorder-controls .help-block {
+  margin-bottom: 5px;
+}
+#shiny-recorder .shiny-recorder-controls.form-group {
+  margin-top: 0px;
+  margin-bottom: 0px;
+}
+#shiny-recorder #save-and-quit .inline-input-container *:not(.shiny-validation-message *){
+  display: inline-block;
+}
+#shiny-recorder #save-and-quit .inline-input-container input[type="text"] {
+  /* display: inline-block; */
+  /* width: calc(100% - 90px); */
+  width: 188px;
+}
+#shiny-recorder #save-and-quit .inline-input-container input[type="number"] {
+  /* display: inline-block; */
+  /* width: calc(100% - 90px); */
+  width: 170px;
+}
+
+#shiny-recorder hr {
+  margin: 0.8em 0;
+  border-top: 1px solid #b6babc;
+}
+
+#shiny-recorder .shiny-recorder-icon {
+  width: 20px;
+  height: 18px;
+  margin-right: 4px;
+  vertical-align: bottom;
+}
+
+#shiny-recorder a.action-button,
+#shiny-recorder a.action-button:visited,
+#shiny-recorder a.action-button:hover {
+  display: block;
+  margin: 0.7em 0;
+  text-decoration:  none;
+  color: #000;
+  height: 18px;
+}
+
+/* Snapshot button needs no margin on top. Need double qualifier for CSS rule
+   to override previous one. */
+#shiny-recorder #appshot {
+  margin-top: 0;
+}
+
+#shiny-recorder .form-group {
+  margin: 0.7em 0;
+}
+
+#shiny-recorder .form-group label {
+  font-weight: normal;
+}
+
+#shiny-recorder .form-group > label {
+  margin-left: 3px;
+  margin-bottom: 3px;
+}
+
+
+
+/* Need to override Bootstrap styling. */
+#shiny-recorder input[type="text"], #shiny-recorder input[type="number"]  {
+  border-radius: 0;
+  font-size: 11px;
+  height: inherit;
+  padding: 2px 4px;
+  border: 1px solid #999;
+}
+
+/* Bring the two checkboxes closer together. */
+#shiny-recorder .form-group .checkbox {
+  margin-bottom: -10px;
+}
+
+
+#shiny-recorder #recorded_events {
+  background-color: #f6f7f9;
+  -webkit-flex-grow: 1;
+  flex-grow: 1;
+  overflow-y: scroll;
+  height: 100%;
+}
+
+#shiny-recorder .table {
+
+}
+
+#shiny-recorder .table thead {
+}
+
+#shiny-recorder .table thead > tr > th {
+  padding-left: 0.7em;
+  font-weight: normal;
+  background: #eeeff1;
+  border-top:    1px solid #f7f8f9;
+  border-right:  1px solid #d6dadd;
+  border-bottom: 1px solid #d6dadd;
+  border-left:   1px solid #f7f8f9;
+}
+
+#shiny-recorder .table thead > tr > th:nth-child(1) {
+  border-right: none;
+}
+#shiny-recorder .table thead > tr > th:nth-child(2) {
+  border-left: none;
+}
+#shiny-recorder .table thead > tr > th:nth-child(3) {
+  border-right: none;
+}
+
+#shiny-recorder .table tbody > tr > td {
+  padding-top: 3px;
+  padding-bottom: 3px;
+  border-top: none;
+}
+
+
+#shiny-recorder #recorded_events pre {
+  /* counter-reset: line; */
+  background-color: white;
+  height: 100%;
+  font-size: 85%;
+}
+
+#shiny-recorder #recorded_events code:not(.no-select-code):before {
+  -webkit-user-select: none;
+}
+#shiny-recorder #recorded_events.no-select-code {
+  -webkit-user-select: none;
+}
+#shiny-recorder #recorded_events .slant-code {
+  color: #ddd;
+  font-style: italic;
+}
+
+
+
+#shiny-recorder #recorded_events pre {
+  padding-bottom: 5px;
+  padding-top: 5px;
+  padding-left: 3px;
+  padding-right: 3px;
+  margin-bottom: 0;
+}
+
+#shiny-recorder #recorded_events pre>div {
+  counter-reset: line 0;
+  display: grid;
+  grid-template-columns: min-content 1fr;
+  /* grid-auto-rows: 1em; */
+  /* row-gap: 0.1em; */
+  column-gap: 0.3em;
+  padding: 0;
+}
+
+#shiny-recorder #recorded_events pre .line-number {
+  text-align: right;
+}
+
+#shiny-recorder #recorded_events pre .line-number::before {
+  counter-increment: line;
+  content: counter(line);
+  white-space: pre;
+  color: #888;
+  /* padding: 0 .5em; */
+  padding-right: .5em;
+  border-right: 1px solid #ddd;
+}
+
+
+/* Do not namespace with `#shiny-recorder` to allow modals to work */
+span[data-toggle="tooltip"] {
+  cursor: help;
+  color: #337ab7;
+}
+span[data-toggle="tooltip"]:hover {
+  color: #23527c;
+}
+.tooltip-inner {
+  max-width: 100% !important;
+  text-align: left;
+}
+
+
+.shiny-validation-message {
+  background-color: #f5e6e5;
+  padding-left: 4px;
+}

@@ -4,8 +4,10 @@ pkg_root <- normalizePath(file.path(dirname(dirname(getwd()))))
 r_dir    <- file.path(pkg_root, "R")
 if (!dir.exists(r_dir)) { pkg_root <- getwd(); r_dir <- file.path(pkg_root, "R") }
 
+# Source config.R first (defines constants used by app_state.R and utils.R)
+tryCatch(source(file.path(r_dir, "config.R"), local = FALSE), error = function(e) NULL)
 for (f in sort(list.files(r_dir, pattern = "\\.R$", full.names = TRUE))) {
-  if (grepl("^mod_|^ui_helpers", basename(f))) next
+  if (grepl("^mod_|^ui_helpers|^config\\.R$", basename(f))) next
   tryCatch(source(f, local = FALSE), error = function(e) NULL)
 }
 
@@ -157,6 +159,155 @@ test_that("backward-compatible load uses defaults for missing Design spec fields
   expect_equal(shiny::isolate(rv$design_model_formula), "")
   expect_equal(shiny::isolate(rv$design_alias_formula), "")
   expect_equal(shiny::isolate(rv$alias_threshold), ALIAS_CORR_THRESH)
+})
+
+test_that("make_default_rv includes Model spec fields with expected defaults", {
+  defs <- make_default_rv()
+
+  expect_true(all(c(
+    "model_active_response", "model_custom_formula", "model_max_way",
+    "model_poly_degree", "model_include_covariates", "model_formula_covariates",
+    "model_max_covariates_per_formula", "model_include_cov_fac",
+    "model_include_blocks", "model_include_block_fac", "model_append_formulas"
+  ) %in% names(defs)))
+
+  expect_null(defs$model_active_response)
+  expect_equal(defs$model_custom_formula, "")
+  expect_equal(defs$model_max_way, MAX_WAY_DEFAULT)
+  expect_equal(defs$model_poly_degree, POLY_DEGREE_DEFAULT)
+  expect_true(defs$model_include_covariates)
+  expect_equal(defs$model_formula_covariates, character(0))
+  expect_equal(defs$model_max_covariates_per_formula, 1L)
+  expect_false(defs$model_include_cov_fac)
+  expect_true(defs$model_include_blocks)
+  expect_false(defs$model_include_block_fac)
+  expect_false(defs$model_append_formulas)
+})
+
+test_that("set_model_custom_formula trims whitespace and handles NULL", {
+  rv <- do.call(shiny::reactiveValues, make_default_rv())
+
+  shiny::isolate(set_model_custom_formula(rv, "  Y ~ A + B  "))
+  expect_equal(shiny::isolate(rv$model_custom_formula), "Y ~ A + B")
+
+  shiny::isolate(set_model_custom_formula(rv, NULL))
+  expect_equal(shiny::isolate(rv$model_custom_formula), "")
+})
+
+test_that("set_model_max_way clamps to valid range", {
+  rv <- do.call(shiny::reactiveValues, make_default_rv())
+
+  shiny::isolate(set_model_max_way(rv, 3))
+  expect_equal(shiny::isolate(rv$model_max_way), 3L)
+
+  shiny::isolate(set_model_max_way(rv, 0))
+  expect_equal(shiny::isolate(rv$model_max_way), 1L)
+
+  shiny::isolate(set_model_max_way(rv, 99))
+  expect_equal(shiny::isolate(rv$model_max_way), MAX_WAY_LIMIT)
+
+  shiny::isolate(set_model_max_way(rv, NULL))
+  expect_equal(shiny::isolate(rv$model_max_way), MAX_WAY_DEFAULT)
+})
+
+test_that("set_model_poly_degree clamps to valid range", {
+  rv <- do.call(shiny::reactiveValues, make_default_rv())
+
+  shiny::isolate(set_model_poly_degree(rv, 4))
+  expect_equal(shiny::isolate(rv$model_poly_degree), 4L)
+
+  shiny::isolate(set_model_poly_degree(rv, 0))
+  expect_equal(shiny::isolate(rv$model_poly_degree), 1L)
+
+  shiny::isolate(set_model_poly_degree(rv, 99))
+  expect_equal(shiny::isolate(rv$model_poly_degree), POLY_DEGREE_LIMIT)
+
+  shiny::isolate(set_model_poly_degree(rv, NULL))
+  expect_equal(shiny::isolate(rv$model_poly_degree), POLY_DEGREE_DEFAULT)
+})
+
+test_that("set_model_max_covariates_per_formula clamps to >= 1", {
+  rv <- do.call(shiny::reactiveValues, make_default_rv())
+
+  shiny::isolate(set_model_max_covariates_per_formula(rv, 3))
+  expect_equal(shiny::isolate(rv$model_max_covariates_per_formula), 3L)
+
+  shiny::isolate(set_model_max_covariates_per_formula(rv, 0))
+  expect_equal(shiny::isolate(rv$model_max_covariates_per_formula), 1L)
+
+  shiny::isolate(set_model_max_covariates_per_formula(rv, NULL))
+  expect_equal(shiny::isolate(rv$model_max_covariates_per_formula), 1L)
+})
+
+test_that("set_model_builder_spec bulk-sets only non-NULL args", {
+  rv <- do.call(shiny::reactiveValues, make_default_rv())
+
+  shiny::isolate(set_model_builder_spec(rv,
+    max_way = 4,
+    include_blocks = FALSE,
+    custom_formula = " Y ~ X "
+  ))
+
+  expect_equal(shiny::isolate(rv$model_max_way), 4L)
+  expect_false(shiny::isolate(rv$model_include_blocks))
+  expect_equal(shiny::isolate(rv$model_custom_formula), "Y ~ X")
+  # Untouched fields keep defaults
+  expect_equal(shiny::isolate(rv$model_poly_degree), POLY_DEGREE_DEFAULT)
+  expect_true(shiny::isolate(rv$model_include_covariates))
+})
+
+test_that("clear_model_spec resets spec fields to defaults", {
+  rv <- do.call(shiny::reactiveValues, make_default_rv())
+
+  shiny::isolate({
+    rv$model_custom_formula <- "Y ~ A + B"
+    rv$model_max_way <- 4L
+    rv$model_include_blocks <- FALSE
+    rv$model_append_formulas <- TRUE
+  })
+
+  shiny::isolate(clear_model_spec(rv))
+
+  expect_null(shiny::isolate(rv$model_active_response))
+  expect_equal(shiny::isolate(rv$model_custom_formula), "")
+  expect_equal(shiny::isolate(rv$model_max_way), MAX_WAY_DEFAULT)
+  expect_true(shiny::isolate(rv$model_include_blocks))
+  expect_false(shiny::isolate(rv$model_append_formulas))
+})
+
+test_that("backward-compatible load uses defaults for missing Model spec fields", {
+  old_state <- list(
+    data = data.frame(Y = 1:3, A = c("a","b","a")),
+    roles = list(Y = "Response", A = "Factor"),
+    formulas = c("Y ~ A" = "Y ~ A")
+  )
+
+  rv <- do.call(shiny::reactiveValues, make_default_rv())
+  shiny::isolate({
+    rv$model_active_response            <- old_state$model_active_response
+    rv$model_custom_formula             <- old_state$model_custom_formula %||% ""
+    rv$model_max_way                    <- old_state$model_max_way %||% MAX_WAY_DEFAULT
+    rv$model_poly_degree                <- old_state$model_poly_degree %||% POLY_DEGREE_DEFAULT
+    rv$model_include_covariates         <- old_state$model_include_covariates %||% TRUE
+    rv$model_formula_covariates         <- old_state$model_formula_covariates %||% character(0)
+    rv$model_max_covariates_per_formula <- old_state$model_max_covariates_per_formula %||% 1L
+    rv$model_include_cov_fac            <- old_state$model_include_cov_fac %||% FALSE
+    rv$model_include_blocks             <- old_state$model_include_blocks %||% TRUE
+    rv$model_include_block_fac          <- old_state$model_include_block_fac %||% FALSE
+    rv$model_append_formulas            <- old_state$model_append_formulas %||% FALSE
+  })
+
+  expect_null(shiny::isolate(rv$model_active_response))
+  expect_equal(shiny::isolate(rv$model_custom_formula), "")
+  expect_equal(shiny::isolate(rv$model_max_way), MAX_WAY_DEFAULT)
+  expect_equal(shiny::isolate(rv$model_poly_degree), POLY_DEGREE_DEFAULT)
+  expect_true(shiny::isolate(rv$model_include_covariates))
+  expect_equal(shiny::isolate(rv$model_formula_covariates), character(0))
+  expect_equal(shiny::isolate(rv$model_max_covariates_per_formula), 1L)
+  expect_false(shiny::isolate(rv$model_include_cov_fac))
+  expect_true(shiny::isolate(rv$model_include_blocks))
+  expect_false(shiny::isolate(rv$model_include_block_fac))
+  expect_false(shiny::isolate(rv$model_append_formulas))
 })
 
 test_that("clear_model_state resets fitted outputs and MC settings to defaults", {

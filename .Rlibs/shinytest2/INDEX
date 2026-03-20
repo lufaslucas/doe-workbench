@@ -1,0 +1,11 @@
+AppDriver               Drive a Shiny application
+compare_screenshot_threshold
+                        Compare screenshots given threshold value
+local_app_support       Attach the Shiny application's support
+                        environment
+migrate_from_shinytest
+                        Migrate 'shinytest' tests
+platform_variant        Platform specific variant
+record_test             Launch test event recorder for a Shiny app
+test_app                Test Shiny applications with 'testthat'
+use_shinytest2          Use 'shinytest2' with your Shiny application

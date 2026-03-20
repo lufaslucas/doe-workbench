@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+export R_LIBS_USER="$ROOT_DIR/.Rlibs${R_LIBS_USER:+:$R_LIBS_USER}"
+export NOT_CRAN="${NOT_CRAN:-true}"
 
 if [[ $# -eq 0 ]]; then
   exec R -q -e "testthat::test_dir('tests/testthat', reporter='summary')"

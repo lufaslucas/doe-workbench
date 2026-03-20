@@ -108,6 +108,19 @@ make_default_rv <- function() {
     model_errors  = list(),
     excluded_obs  = list(),
 
+    # MODEL SPEC (builder settings)
+    model_active_response            = NULL,
+    model_custom_formula             = "",
+    model_max_way                    = MAX_WAY_DEFAULT,
+    model_poly_degree                = POLY_DEGREE_DEFAULT,
+    model_include_covariates         = TRUE,
+    model_formula_covariates         = character(0),
+    model_max_covariates_per_formula = 1L,
+    model_include_cov_fac            = FALSE,
+    model_include_blocks             = TRUE,
+    model_include_block_fac          = FALSE,
+    model_append_formulas            = FALSE,
+
     # DESIGN LAYER
     design_metadata          = list(),
     design_model_formula     = "",

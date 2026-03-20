@@ -2,6 +2,7 @@ library(testthat)
 
 pkg_root <- normalizePath(file.path(dirname(dirname(getwd()))))
 if (!dir.exists(file.path(pkg_root, "R"))) pkg_root <- getwd()
+app_dir <- file.path(pkg_root, "inst", "app")
 
 can_run_shinytest2 <- function() {
   tryCatch({
@@ -37,7 +38,7 @@ test_that("reset clears visible Design spec inputs back to defaults", {
 
   app <- tryCatch(
     shinytest2::AppDriver$new(
-      app_dir = pkg_root,
+      app_dir = app_dir,
       name = "design-state-reset",
       height = 900,
       width = 1400,
@@ -66,5 +67,5 @@ test_that("reset clears visible Design spec inputs back to defaults", {
 
   expect_equal(app$get_value(input = "design-alias_full_formula"), "")
   expect_equal(app$get_value(input = "design-alias_check_formula"), "")
-  expect_equal(app$get_value(input = "design-alias_threshold"), ALIAS_CORR_THRESH)
+  expect_equal(app$get_value(input = "design-alias_threshold"), 0.99)
 })

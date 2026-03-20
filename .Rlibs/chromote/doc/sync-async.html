@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+
+
+<title>Synchronous vs. asynchronous usage</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Synchronous vs. asynchronous usage</h1>
+
+
+
+<p>By default, when you call methods from a <code>Chromote</code> or
+<code>ChromoteSession</code> object, it operates in
+<strong>synchronous</strong> mode. For example, when you call a command
+function (like <code>b$Page$navigate()</code>), a command message is
+sent to the headless browser, the headless browser executes that
+command, and it sends a response message back. When the R process
+receives the response, it converts it from JSON to an R object and the
+function returns that value. During this time, the R process is blocked;
+no other R code can execute.</p>
+<p>The methods in Chromote/ChromoteSession objects can also be called in
+<strong>asynchronous</strong> mode. In async mode, a command function
+fires off a message to the browser, and then the R process continues
+running other code; when the response comes back at some time in the
+future, the R process calls another function and passes the response
+value to it.</p>
+<p>There are two different ways of using async with Chromote. The first
+is with <a href="https://rstudio.github.io/promises/">promises</a> (note
+that these are not the regular R-language promises; these are similar to
+JavaScript promises for async programming.) The second way is with
+callbacks: you call methods with a <code>callback_</code> argument.
+Although callbacks are initially easier to use than promises, once you
+start writing more complex code, managing callbacks becomes very
+difficult, especially when error handling is involved. For this reason,
+this document will focus mostly on promises instead of callback-style
+programming.</p>
+<p>When Chromote methods are called in synchronous mode, under the hood,
+they are implemented with asynchronous functions, and then waiting for
+the asynchronous functions to resolve.</p>
+<blockquote>
+<p><strong>Technical note: About the event loop</strong></p>
+<p>When methods are called asynchronously, the R process will run
+callbacks and promises using an event loop provided by the <a href="https://github.com/r-lib/later">later</a> package. This event loop
+is very similar to the one used in JavaScript, which is explained in
+depth by <a href="https://youtu.be/8aGhZQkoFbQ">Philip Roberts in this
+video</a>. One important difference between JavaScript’s event loop and
+the one provided by <strong>later</strong>’s is that in JavaScript, the
+event loop only runs when the call stack is empty (essentially, when the
+JS runtime is idle); with <strong>later</strong> the event loop
+similarly runs when the call stack is empty (when the R console is
+idle), but it can also be run at any point by calling
+<code>later::run_now()</code>.</p>
+<p>There is another important difference between the JS event loop and
+the one used by Chromote: Chromote uses <em>private event loops</em>
+provided by <a href="https://github.com/r-lib/later">later</a>. Running
+the private event loop with <code>run_now()</code> will not interfere
+with the global event loop. This is crucial for being able to run
+asynchronous code in a way that appears synchronous.</p>
+</blockquote>
+<div id="why-use-async" class="section level2">
+<h2>Why use async?</h2>
+<p>The synchronous API is easier to use than the asynchronous one. So
+why would you want to use the async API? Here are some reasons:</p>
+<ul>
+<li>The async API allows you to send commands to the browser that may
+take some time for the browser to complete, and they will not block the
+R process from doing other work while the browser executes the
+command.</li>
+<li>The async API lets you send commands to multiple browser “tabs” and
+let them work in parallel.</li>
+</ul>
+<p>On the other hand, async programming can make it difficult to write
+code that proceeds in a straightforward, linear manner. Async
+programming may be difficult to use in, say, an analysis script.</p>
+<p>When using Chromote interactively at the R console, it’s usually best
+to just call methods synchronously. This fits well with a iterative,
+interactive data analysis workflow.</p>
+<p>When you are <em>programming</em> with Chromote instead of using it
+interactively, it is in many cases better to call the methods
+asynchronously, because it allows for better performance. In a later
+section, we’ll see how to write asynchronous code with Chromote that can
+be run either synchronously or asynchronously. This provides the best of
+both worlds.</p>
+<p>To see this in action, we’ll first start a new chromote session:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(chromote)</span>
+<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a>b <span class="ot">&lt;-</span> ChromoteSession<span class="sc">$</span><span class="fu">new</span>()</span></code></pre></div>
+</div>
+<div id="async-commands" class="section level2">
+<h2>Async commands</h2>
+<p>When a method is called in synchronous mode, it blocks until the
+browser sends back a response, and then it returns the value, converted
+from JSON to an R object. For example:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="co"># Synchronous</span></span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="fu">str</span>(b<span class="sc">$</span>Browser<span class="sc">$</span><span class="fu">getVersion</span>())</span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a><span class="co">#&gt; List of 5</span></span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="co">#&gt;  $ protocolVersion: chr &quot;1.3&quot;</span></span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a><span class="co">#&gt;  $ product        : chr &quot;HeadlessChrome/98.0.4758.102&quot;</span></span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a><span class="co">#&gt;  $ revision       : chr &quot;@273bf7ac8c909cde36982d27f66f3c70846a3718&quot;</span></span>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a><span class="co">#&gt;  $ userAgent      : chr &quot;Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/98.0.4758.102 Safari/537.36&quot;</span></span>
+<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a><span class="co">#&gt;  $ jsVersion      : chr &quot;9.8.177.11&quot;</span></span></code></pre></div>
+<p>In async mode, there are two ways to use the value that the browser
+sends to the R process. One is to use the <code>callback_</code>
+argument with <code>wait_=FALSE</code>. The <code>wait_=FALSE</code>
+tells it to run the command in async mode; instead of returning the
+value from the browser, it returns a promise. For example:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="co"># Async with callback</span></span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>b<span class="sc">$</span>Browser<span class="sc">$</span><span class="fu">getVersion</span>(<span class="at">wait_ =</span> <span class="cn">FALSE</span>, <span class="at">callback_ =</span> str)</span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a><span class="co">#&gt; &lt;Promise [pending]&gt;</span></span>
+<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a><span class="co">#&gt; List of 5</span></span>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a><span class="co">#&gt;  $ protocolVersion: chr &quot;1.3&quot;</span></span>
+<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a><span class="co">#&gt;  $ product        : chr &quot;HeadlessChrome/98.0.4758.102&quot;</span></span>
+<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a><span class="co">#&gt;  $ revision       : chr &quot;@273bf7ac8c909cde36982d27f66f3c70846a3718&quot;</span></span>
+<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a><span class="co">#&gt;  $ userAgent      : chr &quot;Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/98.0.4758.102 Safari/537.36&quot;</span></span>
+<span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a><span class="co">#&gt;  $ jsVersion      : chr &quot;9.8.177.11&quot;</span></span></code></pre></div>
+<p>Notice that the function returned
+<code>&lt;Promise [pending]&gt;</code>, and then it printed out the
+data. We’ll come back to the promise part.</p>
+<blockquote>
+<p><strong>Technical note</strong></p>
+<p>When you pass a function as <code>callback_</code>, that function is
+used as the first step in the promise chain that is returned.</p>
+</blockquote>
+<p>If you run the command in a code block (or a function), the entire
+code block will finish executing before the callback can be executed.
+For example:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>{</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>  b<span class="sc">$</span>Browser<span class="sc">$</span><span class="fu">getVersion</span>(<span class="at">wait_ =</span> <span class="cn">FALSE</span>, <span class="at">callback_ =</span> str)</span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>  <span class="dv">1</span><span class="sc">+</span><span class="dv">1</span></span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>}</span>
+<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a><span class="co">#&gt; [1] 2</span></span>
+<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a><span class="co">#&gt; List of 5</span></span>
+<span id="cb4-7"><a href="#cb4-7" tabindex="-1"></a><span class="co">#&gt;  $ protocolVersion: chr &quot;1.3&quot;</span></span>
+<span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a><span class="co">#&gt;  $ product        : chr &quot;HeadlessChrome/98.0.4758.102&quot;</span></span>
+<span id="cb4-9"><a href="#cb4-9" tabindex="-1"></a><span class="co">#&gt;  $ revision       : chr &quot;@273bf7ac8c909cde36982d27f66f3c70846a3718&quot;</span></span>
+<span id="cb4-10"><a href="#cb4-10" tabindex="-1"></a><span class="co">#&gt;  $ userAgent      : chr &quot;Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/98.0.4758.102 Safari/537.36&quot;</span></span>
+<span id="cb4-11"><a href="#cb4-11" tabindex="-1"></a><span class="co">#&gt;  $ jsVersion      : chr &quot;9.8.177.11&quot;</span></span></code></pre></div>
+<p>In the code above, it executes the <code>1+1</code> and returns the
+value before the <code>str</code> callback can be executed on the
+message from the browser.</p>
+<p>If you want to store the value from the browser, you can write a
+callback that stores the value like so:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a><span class="co"># This will extract the product field</span></span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>product <span class="ot">&lt;-</span> <span class="cn">NULL</span></span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>b<span class="sc">$</span>Browser<span class="sc">$</span><span class="fu">getVersion</span>(<span class="at">wait_ =</span> <span class="cn">FALSE</span>, <span class="at">callback_ =</span> <span class="cf">function</span>(msg) {</span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a>  product <span class="ot">&lt;&lt;-</span> msg<span class="sc">$</span>product</span>
+<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a>})</span>
+<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a><span class="co">#&gt; &lt;Promise [pending]&gt;</span></span>
+<span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a><span class="co"># Wait for a moment, then run:</span></span>
+<span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a>product</span>
+<span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a><span class="co">#&gt; [1] &quot;HeadlessChrome/98.0.4758.102&quot;</span></span></code></pre></div>
+<p>But to get the value, you need to wait for the callback to execute
+before you can use the value. Waiting for a value is simple when running
+R interactively – you can just add a
+<code>message(&quot;message arrived&quot;)</code> call in the callback and wait
+for it before running the next line of code – but waiting for the value
+is not easy to do using ordinary straight-line coding. Fortunately,
+Chromote has a way to wait for async operations, which we’ll see
+later.</p>
+<p>The other way of using the value is to use <em>promises</em>. If
+<code>wait_=FALSE</code> and no <code>callback_</code> is passed to the
+command, then it will simply return a promise. Promises have many
+advantages over plain old callbacks: they are easier to chain, and they
+provide better error-handling capabilities. You can <em>chain</em> more
+steps to the promise: when the promise resolves – that is, when the
+message is received from the browser – it will run the next step in the
+promise chain.</p>
+<p>Here’s an example that uses promises to print out the version
+information. Note that the surrounding curly braces are there to
+indicate that this whole thing must be run as a block without any idle
+time in between the function calls – if you were to run the code in the
+R console line-by-line, the browser would send back the message and the
+promise would resolve before you called <code>p$then()</code>, which is
+where you tell the promise what to do with the return value. (The curly
+braces aren’t strictly necessary – you could run the code inside the
+braces in a single paste operation and have the same effect.)</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a>{</span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a>  p <span class="ot">&lt;-</span> b<span class="sc">$</span>Browser<span class="sc">$</span><span class="fu">getVersion</span>(<span class="at">wait_ =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a>  p<span class="sc">$</span><span class="fu">then</span>(<span class="cf">function</span>(value) {</span>
+<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a>    <span class="fu">print</span>(value<span class="sc">$</span>product)</span>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a>  })</span>
+<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a>}</span>
+<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a><span class="co"># Wait for a moment, then prints:</span></span>
+<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a><span class="co">#&gt; [1] &quot;HeadlessChrome/98.0.4758.102&quot;</span></span></code></pre></div>
+<p>Here are some progressively more concise ways of achieving the same
+thing. As you work with promises, you will see these various forms of
+promise chaining. For more information, see the <a href="https://rstudio.github.io/promises/">promises
+documentation</a>.</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="fu">library</span>(promises)</span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a></span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a><span class="co"># Chained method call to $then()  </span></span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a>b<span class="sc">$</span>Browser<span class="sc">$</span><span class="fu">getVersion</span>(<span class="at">wait_ =</span> <span class="cn">FALSE</span>)<span class="sc">$</span><span class="fu">then</span>(<span class="cf">function</span>(value) {  </span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a>  <span class="fu">print</span>(value<span class="sc">$</span>product)  </span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a>})  </span>
+<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a></span>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="co"># Regular function pipe to promises::then() function </span></span>
+<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a>b<span class="sc">$</span>Browser<span class="sc">$</span><span class="fu">getVersion</span>(<span class="at">wait_ =</span> <span class="cn">FALSE</span>) <span class="sc">|&gt;</span> <span class="fu">then</span>(<span class="cf">function</span>(value) {  </span>
+<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a>  <span class="fu">print</span>(value<span class="sc">$</span>product)  </span>
+<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a>})  </span>
+<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a></span>
+<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a></span>
+<span id="cb7-14"><a href="#cb7-14" tabindex="-1"></a><span class="co"># Promise-pipe to anonymous function, which must be wrapped in parens</span></span>
+<span id="cb7-15"><a href="#cb7-15" tabindex="-1"></a>b<span class="sc">$</span>Browser<span class="sc">$</span><span class="fu">getVersion</span>(<span class="at">wait_ =</span> <span class="cn">FALSE</span>) <span class="sc">%...&gt;%</span> (<span class="cf">function</span>(value) {</span>
+<span id="cb7-16"><a href="#cb7-16" tabindex="-1"></a>  <span class="fu">print</span>(value<span class="sc">$</span>product)</span>
+<span id="cb7-17"><a href="#cb7-17" tabindex="-1"></a>})</span>
+<span id="cb7-18"><a href="#cb7-18" tabindex="-1"></a></span>
+<span id="cb7-19"><a href="#cb7-19" tabindex="-1"></a><span class="co"># Promise-pipe to an expression (which gets converted to a function with the first argument `.`)</span></span>
+<span id="cb7-20"><a href="#cb7-20" tabindex="-1"></a>b<span class="sc">$</span>Browser<span class="sc">$</span><span class="fu">getVersion</span>(<span class="at">wait_ =</span> <span class="cn">FALSE</span>) <span class="sc">%...&gt;%</span> { <span class="fu">print</span>(.<span class="sc">$</span>product) }</span>
+<span id="cb7-21"><a href="#cb7-21" tabindex="-1"></a></span>
+<span id="cb7-22"><a href="#cb7-22" tabindex="-1"></a><span class="co"># Promise-pipe to a named function, with parentheses</span></span>
+<span id="cb7-23"><a href="#cb7-23" tabindex="-1"></a>print_product <span class="ot">&lt;-</span> <span class="cf">function</span>(msg) <span class="fu">print</span>(msg<span class="sc">$</span>product)</span>
+<span id="cb7-24"><a href="#cb7-24" tabindex="-1"></a>b<span class="sc">$</span>Browser<span class="sc">$</span><span class="fu">getVersion</span>(<span class="at">wait_ =</span> <span class="cn">FALSE</span>) <span class="sc">%...&gt;%</span> <span class="fu">print_product</span>()</span>
+<span id="cb7-25"><a href="#cb7-25" tabindex="-1"></a></span>
+<span id="cb7-26"><a href="#cb7-26" tabindex="-1"></a><span class="co"># Promise-pipe to a named function, without parentheses</span></span>
+<span id="cb7-27"><a href="#cb7-27" tabindex="-1"></a>b<span class="sc">$</span>Browser<span class="sc">$</span><span class="fu">getVersion</span>(<span class="at">wait_ =</span> <span class="cn">FALSE</span>) <span class="sc">%...&gt;%</span> print_product</span></code></pre></div>
+<p>The earlier example where we found the dimensions of a DOM element
+using CSS selectors was done with the synchronous API and
+<code>%&gt;%</code> pipes. The same can be done in async mode by
+switching from the regular pipe to the promise-pipe, and calling all the
+methods with <code>wait_=FALSE</code>:</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a>b<span class="sc">$</span>DOM<span class="sc">$</span><span class="fu">getDocument</span>(<span class="at">wait_ =</span> <span class="cn">FALSE</span>) <span class="sc">%...&gt;%</span></span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a>  { b<span class="sc">$</span>DOM<span class="sc">$</span><span class="fu">querySelector</span>(.<span class="sc">$</span>root<span class="sc">$</span>nodeId, <span class="st">&quot;.sidebar&quot;</span>, <span class="at">wait_ =</span> <span class="cn">FALSE</span>) } <span class="sc">%...&gt;%</span></span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>  { b<span class="sc">$</span>DOM<span class="sc">$</span><span class="fu">getBoxModel</span>(.<span class="sc">$</span>nodeId, <span class="at">wait_ =</span> <span class="cn">FALSE</span>) } <span class="sc">%...&gt;%</span></span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a>  <span class="fu">str</span>()</span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a></span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a></span>
+<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a><span class="co"># Or, more verbosely:</span></span>
+<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a>b<span class="sc">$</span>DOM<span class="sc">$</span><span class="fu">getDocument</span>(<span class="at">wait_ =</span> <span class="cn">FALSE</span>)<span class="sc">$</span></span>
+<span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a>  <span class="fu">then</span>(<span class="cf">function</span>(value) {</span>
+<span id="cb8-10"><a href="#cb8-10" tabindex="-1"></a>    b<span class="sc">$</span>DOM<span class="sc">$</span><span class="fu">querySelector</span>(value<span class="sc">$</span>root<span class="sc">$</span>nodeId, <span class="st">&quot;.sidebar&quot;</span>, <span class="at">wait_ =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb8-11"><a href="#cb8-11" tabindex="-1"></a>  })<span class="sc">$</span></span>
+<span id="cb8-12"><a href="#cb8-12" tabindex="-1"></a>  <span class="fu">then</span>(<span class="cf">function</span>(value) {</span>
+<span id="cb8-13"><a href="#cb8-13" tabindex="-1"></a>    b<span class="sc">$</span>DOM<span class="sc">$</span><span class="fu">getBoxModel</span>(value<span class="sc">$</span>nodeId, <span class="at">wait_ =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb8-14"><a href="#cb8-14" tabindex="-1"></a>  })<span class="sc">$</span></span>
+<span id="cb8-15"><a href="#cb8-15" tabindex="-1"></a>  <span class="fu">then</span>(<span class="cf">function</span>(value) {</span>
+<span id="cb8-16"><a href="#cb8-16" tabindex="-1"></a>    <span class="fu">str</span>(value)</span>
+<span id="cb8-17"><a href="#cb8-17" tabindex="-1"></a>  })</span></code></pre></div>
+<p>Each step in the promise chain uses the value from the previous step,
+via <code>.</code> or <code>value</code>. Note that not all asynchronous
+code works in such a linear, straightforward way. Sometimes it is
+necessary to save data from intermediate steps in a broader-scoped
+variable, if it is to be used in a later step in the promise chain.</p>
+</div>
+<div id="turning-asynchronous-code-into-synchronous-code" class="section level2">
+<h2>Turning asynchronous code into synchronous code</h2>
+<p>There may be times, especially when programming with Chromote, where
+you want to wait for a promise to resolve before continuing. To do this,
+you can use the Chromote or ChromoteSession’s <code>wait_for()</code>
+method.</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a><span class="co"># A promise chain</span></span>
+<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a>p <span class="ot">&lt;-</span> b<span class="sc">$</span>DOM<span class="sc">$</span><span class="fu">getDocument</span>(<span class="at">wait_ =</span> <span class="cn">FALSE</span>) <span class="sc">%...&gt;%</span></span>
+<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a>  { b<span class="sc">$</span>DOM<span class="sc">$</span><span class="fu">querySelector</span>(.<span class="sc">$</span>root<span class="sc">$</span>nodeId, <span class="st">&quot;.sidebar&quot;</span>, <span class="at">wait_ =</span> <span class="cn">FALSE</span>) } <span class="sc">%...&gt;%</span></span>
+<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a>  { b<span class="sc">$</span>DOM<span class="sc">$</span><span class="fu">getBoxModel</span>(.<span class="sc">$</span>nodeId, <span class="at">wait_ =</span> <span class="cn">FALSE</span>) } <span class="sc">%...&gt;%</span></span>
+<span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a>  <span class="fu">str</span>()</span>
+<span id="cb9-6"><a href="#cb9-6" tabindex="-1"></a></span>
+<span id="cb9-7"><a href="#cb9-7" tabindex="-1"></a>b<span class="sc">$</span><span class="fu">wait_for</span>(p)</span>
+<span id="cb9-8"><a href="#cb9-8" tabindex="-1"></a><span class="co">#&gt; List of 1</span></span>
+<span id="cb9-9"><a href="#cb9-9" tabindex="-1"></a><span class="co">#&gt;  $ model:List of 6</span></span>
+<span id="cb9-10"><a href="#cb9-10" tabindex="-1"></a><span class="co">#&gt;   ..$ content:List of 8</span></span>
+<span id="cb9-11"><a href="#cb9-11" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 128</span></span>
+<span id="cb9-12"><a href="#cb9-12" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : int 28</span></span>
+<span id="cb9-13"><a href="#cb9-13" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 292</span></span>
+<span id="cb9-14"><a href="#cb9-14" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : int 28</span></span>
+<span id="cb9-15"><a href="#cb9-15" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 292</span></span>
+<span id="cb9-16"><a href="#cb9-16" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 988</span></span>
+<span id="cb9-17"><a href="#cb9-17" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 128</span></span>
+<span id="cb9-18"><a href="#cb9-18" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 988</span></span>
+<span id="cb9-19"><a href="#cb9-19" tabindex="-1"></a><span class="co">#&gt;   ..$ padding:List of 8</span></span>
+<span id="cb9-20"><a href="#cb9-20" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 112</span></span>
+<span id="cb9-21"><a href="#cb9-21" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : int 28</span></span>
+<span id="cb9-22"><a href="#cb9-22" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 308</span></span>
+<span id="cb9-23"><a href="#cb9-23" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : int 28</span></span>
+<span id="cb9-24"><a href="#cb9-24" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 308</span></span>
+<span id="cb9-25"><a href="#cb9-25" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 988</span></span>
+<span id="cb9-26"><a href="#cb9-26" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 112</span></span>
+<span id="cb9-27"><a href="#cb9-27" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 988</span></span>
+<span id="cb9-28"><a href="#cb9-28" tabindex="-1"></a><span class="co">#&gt;   ..$ border :List of 8</span></span>
+<span id="cb9-29"><a href="#cb9-29" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 112</span></span>
+<span id="cb9-30"><a href="#cb9-30" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : int 28</span></span>
+<span id="cb9-31"><a href="#cb9-31" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 308</span></span>
+<span id="cb9-32"><a href="#cb9-32" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : int 28</span></span>
+<span id="cb9-33"><a href="#cb9-33" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 308</span></span>
+<span id="cb9-34"><a href="#cb9-34" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 988</span></span>
+<span id="cb9-35"><a href="#cb9-35" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 112</span></span>
+<span id="cb9-36"><a href="#cb9-36" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 988</span></span>
+<span id="cb9-37"><a href="#cb9-37" tabindex="-1"></a><span class="co">#&gt;   ..$ margin :List of 8</span></span>
+<span id="cb9-38"><a href="#cb9-38" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : int 15</span></span>
+<span id="cb9-39"><a href="#cb9-39" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : int 28</span></span>
+<span id="cb9-40"><a href="#cb9-40" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 308</span></span>
+<span id="cb9-41"><a href="#cb9-41" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : int 28</span></span>
+<span id="cb9-42"><a href="#cb9-42" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 308</span></span>
+<span id="cb9-43"><a href="#cb9-43" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 1030</span></span>
+<span id="cb9-44"><a href="#cb9-44" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : int 15</span></span>
+<span id="cb9-45"><a href="#cb9-45" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 1030</span></span>
+<span id="cb9-46"><a href="#cb9-46" tabindex="-1"></a><span class="co">#&gt;   ..$ width  : int 195</span></span>
+<span id="cb9-47"><a href="#cb9-47" tabindex="-1"></a><span class="co">#&gt;   ..$ height : int 960</span></span></code></pre></div>
+<p>This documentation will refer to this technique as
+<em>synchronizing</em> asynchronous code. The way that
+<code>wait_for()</code> works is that it runs the Chromote object’s
+private event loop until the promise has resolved. Because the event
+loop is <em>private</em>, running it will not interfere with the global
+event loop, which, for example, may used by Shiny to serve a web
+application.</p>
+<p>The <code>$wait_for()</code> method will return the value from the
+promise, so instead of putting the <code>str()</code> in the chain, you
+call <code>str()</code> on the value returned by
+<code>$wait_for()</code>:</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a>p <span class="ot">&lt;-</span> b<span class="sc">$</span>DOM<span class="sc">$</span><span class="fu">getDocument</span>(<span class="at">wait_ =</span> <span class="cn">FALSE</span>) <span class="sc">%...&gt;%</span></span>
+<span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a>  { b<span class="sc">$</span>DOM<span class="sc">$</span><span class="fu">querySelector</span>(.<span class="sc">$</span>root<span class="sc">$</span>nodeId, <span class="st">&quot;.sidebar&quot;</span>, <span class="at">wait_ =</span> <span class="cn">FALSE</span>) } <span class="sc">%...&gt;%</span></span>
+<span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a>  { b<span class="sc">$</span>DOM<span class="sc">$</span><span class="fu">getBoxModel</span>(.<span class="sc">$</span>nodeId, <span class="at">wait_ =</span> <span class="cn">FALSE</span>) }</span>
+<span id="cb10-4"><a href="#cb10-4" tabindex="-1"></a></span>
+<span id="cb10-5"><a href="#cb10-5" tabindex="-1"></a>x <span class="ot">&lt;-</span> b<span class="sc">$</span><span class="fu">wait_for</span>(p)</span>
+<span id="cb10-6"><a href="#cb10-6" tabindex="-1"></a><span class="fu">str</span>(x)</span>
+<span id="cb10-7"><a href="#cb10-7" tabindex="-1"></a><span class="co">#&gt; List of 1</span></span>
+<span id="cb10-8"><a href="#cb10-8" tabindex="-1"></a><span class="co">#&gt;  $ model:List of 6</span></span>
+<span id="cb10-9"><a href="#cb10-9" tabindex="-1"></a><span class="co">#&gt;   ..$ content:List of 8</span></span>
+<span id="cb10-10"><a href="#cb10-10" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 128</span></span>
+<span id="cb10-11"><a href="#cb10-11" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : int 28</span></span>
+<span id="cb10-12"><a href="#cb10-12" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 292</span></span>
+<span id="cb10-13"><a href="#cb10-13" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : int 28</span></span>
+<span id="cb10-14"><a href="#cb10-14" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 292</span></span>
+<span id="cb10-15"><a href="#cb10-15" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 988</span></span>
+<span id="cb10-16"><a href="#cb10-16" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 128</span></span>
+<span id="cb10-17"><a href="#cb10-17" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 988</span></span>
+<span id="cb10-18"><a href="#cb10-18" tabindex="-1"></a><span class="co">#&gt;   ..$ padding:List of 8</span></span>
+<span id="cb10-19"><a href="#cb10-19" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 112</span></span>
+<span id="cb10-20"><a href="#cb10-20" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : int 28</span></span>
+<span id="cb10-21"><a href="#cb10-21" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 308</span></span>
+<span id="cb10-22"><a href="#cb10-22" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : int 28</span></span>
+<span id="cb10-23"><a href="#cb10-23" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 308</span></span>
+<span id="cb10-24"><a href="#cb10-24" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 988</span></span>
+<span id="cb10-25"><a href="#cb10-25" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 112</span></span>
+<span id="cb10-26"><a href="#cb10-26" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 988</span></span>
+<span id="cb10-27"><a href="#cb10-27" tabindex="-1"></a><span class="co">#&gt;   ..$ border :List of 8</span></span>
+<span id="cb10-28"><a href="#cb10-28" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 112</span></span>
+<span id="cb10-29"><a href="#cb10-29" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : int 28</span></span>
+<span id="cb10-30"><a href="#cb10-30" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 308</span></span>
+<span id="cb10-31"><a href="#cb10-31" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : int 28</span></span>
+<span id="cb10-32"><a href="#cb10-32" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 308</span></span>
+<span id="cb10-33"><a href="#cb10-33" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 988</span></span>
+<span id="cb10-34"><a href="#cb10-34" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 112</span></span>
+<span id="cb10-35"><a href="#cb10-35" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 988</span></span>
+<span id="cb10-36"><a href="#cb10-36" tabindex="-1"></a><span class="co">#&gt;   ..$ margin :List of 8</span></span>
+<span id="cb10-37"><a href="#cb10-37" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : int 15</span></span>
+<span id="cb10-38"><a href="#cb10-38" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : int 28</span></span>
+<span id="cb10-39"><a href="#cb10-39" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 308</span></span>
+<span id="cb10-40"><a href="#cb10-40" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : int 28</span></span>
+<span id="cb10-41"><a href="#cb10-41" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 308</span></span>
+<span id="cb10-42"><a href="#cb10-42" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 1030</span></span>
+<span id="cb10-43"><a href="#cb10-43" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : int 15</span></span>
+<span id="cb10-44"><a href="#cb10-44" tabindex="-1"></a><span class="co">#&gt;   .. ..$ : num 1030</span></span>
+<span id="cb10-45"><a href="#cb10-45" tabindex="-1"></a><span class="co">#&gt;   ..$ width  : int 195</span></span>
+<span id="cb10-46"><a href="#cb10-46" tabindex="-1"></a><span class="co">#&gt;   ..$ height : int 960</span></span></code></pre></div>
+<p>There are some methods in Chromote and ChromoteSession objects which
+are written using asynchronous method calls, but conditionally use
+<code>wait_for()</code> so that they can be called either synchronously
+or asynchronously. The <code>$screenshot()</code> method works this way,
+for example. You can call <code>b$screenshot(wait_=TRUE)</code> (which
+is the default) for synchronous behavior, or
+<code>b$screenshot(wait_=FALSE)</code> for async behavior.</p>
+<p>If you want to write a function that can be called in either sync or
+async mode, you can use this basic structure: First, construct a promise
+chain by calling the CDP methods with <code>wait_=FALSE</code>. Then, at
+the end, if the user used <code>wait_=TRUE</code>, wait for the promise
+to resolve; otherwise, simply return the promise.</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a>getBoxModel <span class="ot">&lt;-</span> <span class="cf">function</span>(b, <span class="at">selector =</span> <span class="st">&quot;html&quot;</span>, <span class="at">wait_ =</span> <span class="cn">TRUE</span>) {</span>
+<span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a>  p <span class="ot">&lt;-</span> b<span class="sc">$</span>DOM<span class="sc">$</span><span class="fu">getDocument</span>(<span class="at">wait_ =</span> <span class="cn">FALSE</span>) <span class="sc">%...&gt;%</span></span>
+<span id="cb11-3"><a href="#cb11-3" tabindex="-1"></a>    { b<span class="sc">$</span>DOM<span class="sc">$</span><span class="fu">querySelector</span>(.<span class="sc">$</span>root<span class="sc">$</span>nodeId, selector, <span class="at">wait_ =</span> <span class="cn">FALSE</span>) } <span class="sc">%...&gt;%</span></span>
+<span id="cb11-4"><a href="#cb11-4" tabindex="-1"></a>    { b<span class="sc">$</span>DOM<span class="sc">$</span><span class="fu">getBoxModel</span>(.<span class="sc">$</span>nodeId, <span class="at">wait_ =</span> <span class="cn">FALSE</span>) }</span>
+<span id="cb11-5"><a href="#cb11-5" tabindex="-1"></a></span>
+<span id="cb11-6"><a href="#cb11-6" tabindex="-1"></a>  <span class="cf">if</span> (wait_) {</span>
+<span id="cb11-7"><a href="#cb11-7" tabindex="-1"></a>    b<span class="sc">$</span><span class="fu">wait_for</span>(p)</span>
+<span id="cb11-8"><a href="#cb11-8" tabindex="-1"></a>  } <span class="cf">else</span> {</span>
+<span id="cb11-9"><a href="#cb11-9" tabindex="-1"></a>    p</span>
+<span id="cb11-10"><a href="#cb11-10" tabindex="-1"></a>  }</span>
+<span id="cb11-11"><a href="#cb11-11" tabindex="-1"></a>}</span>
+<span id="cb11-12"><a href="#cb11-12" tabindex="-1"></a></span>
+<span id="cb11-13"><a href="#cb11-13" tabindex="-1"></a><span class="co"># Synchronous call</span></span>
+<span id="cb11-14"><a href="#cb11-14" tabindex="-1"></a><span class="fu">str</span>(<span class="fu">getBoxModel</span>(b, <span class="st">&quot;.sidebar&quot;</span>))</span>
+<span id="cb11-15"><a href="#cb11-15" tabindex="-1"></a></span>
+<span id="cb11-16"><a href="#cb11-16" tabindex="-1"></a><span class="co"># Asynchronous call</span></span>
+<span id="cb11-17"><a href="#cb11-17" tabindex="-1"></a><span class="fu">getBoxModel</span>(b, <span class="st">&quot;.sidebar&quot;</span>, <span class="at">wait_ =</span> <span class="cn">FALSE</span>) <span class="sc">%...&gt;%</span></span>
+<span id="cb11-18"><a href="#cb11-18" tabindex="-1"></a>  <span class="fu">str</span>()</span></code></pre></div>
+<p>But, you might be wondering, if we want a synchronous API, why not
+simply write the synchronous code by calling the individual methods
+synchronously, and using a normal pipe to connect them, as in:</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a>b<span class="sc">$</span>DOM<span class="sc">$</span><span class="fu">getDocument</span>() <span class="sc">%&gt;%</span></span>
+<span id="cb12-2"><a href="#cb12-2" tabindex="-1"></a>  { b<span class="sc">$</span>DOM<span class="sc">$</span><span class="fu">querySelector</span>(.<span class="sc">$</span>root<span class="sc">$</span>nodeId, <span class="st">&quot;.sidebar&quot;</span>) } <span class="sc">%&gt;%</span></span>
+<span id="cb12-3"><a href="#cb12-3" tabindex="-1"></a>  { b<span class="sc">$</span>DOM<span class="sc">$</span><span class="fu">getBoxModel</span>(.<span class="sc">$</span>nodeId) } <span class="sc">%&gt;%</span></span>
+<span id="cb12-4"><a href="#cb12-4" tabindex="-1"></a>  <span class="fu">str</span>()</span></code></pre></div>
+<p>There are two reasons for this. The first is that this would require
+a duplication of all the code for the sync and async code paths. Another
+reason is that the internal async code can be written to send multiple
+independent command chains to the ChromoteSession (or multiple
+ChromoteSessions), and they will be executed concurrently. If there are
+multiple promise chains, you can do something like the following to wait
+for all of them to resolve:</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a><span class="co"># Starting with promises p1, p2, and p3, create a promise that resolves only</span></span>
+<span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a><span class="co"># after they have all been resolved.</span></span>
+<span id="cb13-3"><a href="#cb13-3" tabindex="-1"></a>p <span class="ot">&lt;-</span> <span class="fu">promise_all</span>(p1, p2, p3)</span>
+<span id="cb13-4"><a href="#cb13-4" tabindex="-1"></a>b<span class="sc">$</span><span class="fu">wait_for</span>(p)</span></code></pre></div>
+</div>
+<div id="async-events" class="section level2">
+<h2>Async events</h2>
+<p>In addition to <em>commands</em> The Chrome DevTools Protocol also
+has <em>events</em>. These are messages that are sent from the browser
+to the R process when various browser events happen.</p>
+<p>As an example, it can be a bit tricky to find out when to take a
+screenshot. When you send the browser a command to navigate to a page,
+it sends a response immediately, but it may take several more seconds
+for it to actually finish loading that page. When it does, the
+<code>Page.loadEventFired</code> event will be fired.</p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a>b <span class="ot">&lt;-</span> ChromoteSession<span class="sc">$</span><span class="fu">new</span>()</span>
+<span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a></span>
+<span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a><span class="co"># Navigate and wait for Page.loadEventFired.</span></span>
+<span id="cb14-4"><a href="#cb14-4" tabindex="-1"></a><span class="co"># Note: these lines are put in a single code block to ensure that there is no</span></span>
+<span id="cb14-5"><a href="#cb14-5" tabindex="-1"></a><span class="co"># idle time in between.</span></span>
+<span id="cb14-6"><a href="#cb14-6" tabindex="-1"></a>{</span>
+<span id="cb14-7"><a href="#cb14-7" tabindex="-1"></a>  b<span class="sc">$</span>Page<span class="sc">$</span><span class="fu">navigate</span>(<span class="st">&quot;https://www.r-project.org/&quot;</span>)</span>
+<span id="cb14-8"><a href="#cb14-8" tabindex="-1"></a>  <span class="fu">str</span>(b<span class="sc">$</span>Page<span class="sc">$</span><span class="fu">loadEventFired</span>())</span>
+<span id="cb14-9"><a href="#cb14-9" tabindex="-1"></a>}</span>
+<span id="cb14-10"><a href="#cb14-10" tabindex="-1"></a><span class="co">#&gt; List of 1</span></span>
+<span id="cb14-11"><a href="#cb14-11" tabindex="-1"></a><span class="co">#&gt;  $ timestamp: num 683</span></span></code></pre></div>
+<p>With the synchronous API, the call to
+<code>b$Page$loadEventFired()</code> will block until Chromote receives
+a <code>Page.loadEventFired</code> message from the browser. However,
+with the async promise API, you would write it like this:</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a>b<span class="sc">$</span>Page<span class="sc">$</span><span class="fu">navigate</span>(<span class="st">&quot;https://www.r-project.org/&quot;</span>, <span class="at">wait_ =</span> <span class="cn">FALSE</span>) <span class="sc">%...&gt;%</span></span>
+<span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a>  { b<span class="sc">$</span>Page<span class="sc">$</span><span class="fu">loadEventFired</span>(<span class="at">wait_ =</span> <span class="cn">FALSE</span>) } <span class="sc">%...&gt;%</span></span>
+<span id="cb15-3"><a href="#cb15-3" tabindex="-1"></a>  { <span class="fu">str</span>(.) }</span>
+<span id="cb15-4"><a href="#cb15-4" tabindex="-1"></a></span>
+<span id="cb15-5"><a href="#cb15-5" tabindex="-1"></a><span class="co"># Or, more verbosely:</span></span>
+<span id="cb15-6"><a href="#cb15-6" tabindex="-1"></a>b<span class="sc">$</span>Page<span class="sc">$</span><span class="fu">navigate</span>(<span class="st">&quot;https://www.r-project.org/&quot;</span>, <span class="at">wait_ =</span> <span class="cn">FALSE</span>)<span class="sc">$</span></span>
+<span id="cb15-7"><a href="#cb15-7" tabindex="-1"></a>  <span class="fu">then</span>(<span class="cf">function</span>(value) {</span>
+<span id="cb15-8"><a href="#cb15-8" tabindex="-1"></a>    b<span class="sc">$</span>Page<span class="sc">$</span><span class="fu">loadEventFired</span>(<span class="at">wait_ =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb15-9"><a href="#cb15-9" tabindex="-1"></a>  })<span class="sc">$</span></span>
+<span id="cb15-10"><a href="#cb15-10" tabindex="-1"></a>  <span class="fu">then</span>(<span class="cf">function</span>(value) {</span>
+<span id="cb15-11"><a href="#cb15-11" tabindex="-1"></a>    <span class="fu">str</span>(value)</span>
+<span id="cb15-12"><a href="#cb15-12" tabindex="-1"></a>  })</span></code></pre></div>
+<p>There will be a short delay after running the code before the value
+is printed.</p>
+<p>However, even this is not perfectly reliable, because in some cases,
+the browser will navigate to the page before it receives the
+<code>loadEventFired</code> command from Chromote. If that happens, the
+load even will have already happened before the browser starts waiting
+for it, and it will hang. The correct way to deal with this is to issue
+the <code>loadEventFired</code> command <em>before</em> navigating to
+the page, and then wait for the <code>loadEventFired</code> promise to
+resolve.</p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" tabindex="-1"></a><span class="co"># This is the correct way to wait for a page to load with async and then chain more commands</span></span>
+<span id="cb16-2"><a href="#cb16-2" tabindex="-1"></a>p <span class="ot">&lt;-</span> b<span class="sc">$</span>Page<span class="sc">$</span><span class="fu">loadEventFired</span>(<span class="at">wait_ =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb16-3"><a href="#cb16-3" tabindex="-1"></a>b<span class="sc">$</span>Page<span class="sc">$</span><span class="fu">navigate</span>(<span class="st">&quot;https://www.r-project.org/&quot;</span>, <span class="at">wait_ =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb16-4"><a href="#cb16-4" tabindex="-1"></a></span>
+<span id="cb16-5"><a href="#cb16-5" tabindex="-1"></a><span class="co"># A promise chain of more commands after the page has loaded</span></span>
+<span id="cb16-6"><a href="#cb16-6" tabindex="-1"></a>p<span class="sc">$</span><span class="fu">then</span>(<span class="cf">function</span>(value) {</span>
+<span id="cb16-7"><a href="#cb16-7" tabindex="-1"></a>  <span class="fu">str</span>(value)</span>
+<span id="cb16-8"><a href="#cb16-8" tabindex="-1"></a>})</span></code></pre></div>
+<p>If you want to block until the page has loaded, you can once again
+use <code>wait_for()</code>. For example:</p>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" tabindex="-1"></a>p <span class="ot">&lt;-</span> b<span class="sc">$</span>Page<span class="sc">$</span><span class="fu">loadEventFired</span>(<span class="at">wait_ =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb17-2"><a href="#cb17-2" tabindex="-1"></a>b<span class="sc">$</span>Page<span class="sc">$</span><span class="fu">navigate</span>(<span class="st">&quot;https://www.r-project.org/&quot;</span>, <span class="at">wait_ =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb17-3"><a href="#cb17-3" tabindex="-1"></a></span>
+<span id="cb17-4"><a href="#cb17-4" tabindex="-1"></a><span class="co"># wait_for returns the last value in the chain, so we can call str() on it</span></span>
+<span id="cb17-5"><a href="#cb17-5" tabindex="-1"></a><span class="fu">str</span>(b<span class="sc">$</span><span class="fu">wait_for</span>(p))</span>
+<span id="cb17-6"><a href="#cb17-6" tabindex="-1"></a><span class="co">#&gt; List of 1</span></span>
+<span id="cb17-7"><a href="#cb17-7" tabindex="-1"></a><span class="co">#&gt;  $ timestamp: num 683</span></span></code></pre></div>
+<p><code>b$go_to()</code> is a convenience method that does things in
+this order, and in most cases you should use it instead of calling
+<code>Page$navigate()</code> directly.</p>
+<blockquote>
+<p><strong>Technical note</strong></p>
+<p>The Chrome DevTools Protocol itself does not automatically enable
+event notifications. Normally, you would have to call the
+<code>Page.enable</code> method to turn on event notifications for the
+Page domain. However, Chromote saves you from needing to do this step by
+keeping track of how many callbacks there are for each domain. When the
+number of event callbacks for a domain goes from 0 to 1, Chromote
+automatically calls <code>$enable()</code> for that domain, and when it
+goes from 1 to 0, it it calls <code>$disable()</code>. See
+<code>vignette(&quot;commands-and-events&quot;)</code> for more details.</p>
+</blockquote>
+<p>In addition to async events with promises, they can also be used with
+regular callbacks. For example:</p>
+<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" tabindex="-1"></a>b<span class="sc">$</span>Page<span class="sc">$</span><span class="fu">loadEventFired</span>(<span class="at">callback_ =</span> str)</span></code></pre></div>
+<p>This tells Chromote to call <code>str()</code> (which prints to the
+console) on the message value every single time that a
+<code>Page.loadEventFired</code> event message is received. It will
+continue doing this indefinitely. (Calling an event method this way also
+increments the event callback counter.)</p>
+<p>When an event method is called with a callback, the return value is a
+function which will cancel the callback, so that it will no longer fire.
+(The canceller function also decrements the event callback counter. If
+you lose the canceller function, there is no way to decrement the
+callback counter back to 0.)</p>
+<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" tabindex="-1"></a>cancel_load_event_callback <span class="ot">&lt;-</span> b<span class="sc">$</span>Page<span class="sc">$</span><span class="fu">loadEventFired</span>(<span class="at">callback_ =</span> str)</span>
+<span id="cb19-2"><a href="#cb19-2" tabindex="-1"></a></span>
+<span id="cb19-3"><a href="#cb19-3" tabindex="-1"></a><span class="co"># Each of these will cause the callback to fire.</span></span>
+<span id="cb19-4"><a href="#cb19-4" tabindex="-1"></a>n1 <span class="ot">&lt;-</span> b<span class="sc">$</span>Page<span class="sc">$</span><span class="fu">navigate</span>(<span class="st">&quot;https://www.r-project.org/&quot;</span>)</span>
+<span id="cb19-5"><a href="#cb19-5" tabindex="-1"></a>n2 <span class="ot">&lt;-</span> b<span class="sc">$</span>Page<span class="sc">$</span><span class="fu">navigate</span>(<span class="st">&quot;https://cran.r-project.org/&quot;</span>)</span>
+<span id="cb19-6"><a href="#cb19-6" tabindex="-1"></a></span>
+<span id="cb19-7"><a href="#cb19-7" tabindex="-1"></a><span class="fu">cancel_load_event_callback</span>()</span>
+<span id="cb19-8"><a href="#cb19-8" tabindex="-1"></a></span>
+<span id="cb19-9"><a href="#cb19-9" tabindex="-1"></a><span class="co"># No longer causes the callback to fire.</span></span>
+<span id="cb19-10"><a href="#cb19-10" tabindex="-1"></a>n3 <span class="ot">&lt;-</span> b<span class="sc">$</span>Page<span class="sc">$</span><span class="fu">navigate</span>(<span class="st">&quot;https://www.rstudio.com/&quot;</span>)</span></code></pre></div>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
