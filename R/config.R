@@ -82,9 +82,9 @@ READONLY_HASH_ALGO  <- "sha256"       # digest algorithm for password hashing
 
 # ── Build Info ──────────────────────────────────────────────────────────
 get_build_info <- function() {
-  # In dev mode (load_all), read live from git
-  pkg_root <- tryCatch(here::here(), error = function(e) NULL)
-  if (!is.null(pkg_root) && dir.exists(file.path(pkg_root, ".git"))) {
+  # In dev mode, read live from git
+  pkg_root <- Sys.getenv("DOE_DEV_ROOT", unset = "")
+  if (nzchar(pkg_root) && dir.exists(file.path(pkg_root, ".git"))) {
     branch <- tryCatch(
       trimws(system2("git", c("-C", pkg_root, "rev-parse", "--abbrev-ref", "HEAD"),
                       stdout = TRUE, stderr = FALSE)),

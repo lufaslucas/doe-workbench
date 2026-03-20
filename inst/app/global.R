@@ -1,16 +1,15 @@
 # global.R — Bootstrap for doe.workbench Shiny app
-# Dev mode: load_all() sources R/ files directly (no install needed).
-# Installed mode: falls back to library(doe.workbench).
 
 # Show full error messages in-app instead of grey disconnect overlay
 options(shiny.sanitize.errors = FALSE)
 
 suppressPackageStartupMessages({
-  # Use load_all() in dev (when DESCRIPTION + R/ exist at package root), else installed package
-  pkg_root <- tryCatch(here::here(), error = function(e) NULL)
-  if (!is.null(pkg_root) && file.exists(file.path(pkg_root, "DESCRIPTION")) &&
-      file.exists(file.path(pkg_root, "R"))) {
-    pkgload::load_all(pkg_root, export_all = FALSE, helpers = FALSE, quiet = TRUE)
+  # In dev mode, set DOE_DEV_ROOT env var before running:
+  #   Sys.setenv(DOE_DEV_ROOT = "/path/to/doe-workbench"); shiny::runApp("inst/app")
+  # Otherwise loads the installed package.
+  dev_root <- Sys.getenv("DOE_DEV_ROOT", unset = "")
+  if (nzchar(dev_root) && file.exists(file.path(dev_root, "DESCRIPTION"))) {
+    pkgload::load_all(dev_root, export_all = FALSE, helpers = FALSE, quiet = TRUE)
   } else {
     library(doe.workbench)
   }
