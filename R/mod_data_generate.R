@@ -804,11 +804,8 @@ mod_data_generate_server <- function(id, rv, analysis_mode, navigate_to,
           }
 
           if (length(default_formulas) > 0) {
-            rv$formula_gen <- rv$formula_gen + 1L
+            clear_formula_state(rv)
             rv$formulas <- default_formulas
-            rv$formula_aliases <- list()
-            rv$alias_labels <- list()
-            rv$inestimable_terms <- character()
           }
         }
       }

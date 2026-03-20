@@ -668,11 +668,8 @@ mod_data_upload_server <- function(id, rv, analysis_mode, navigate_to,
       }
 
       if (length(default_formulas) > 0) {
-        rv$formula_gen <- rv$formula_gen + 1L
+        clear_formula_state(rv)
         rv$formulas <- default_formulas
-        rv$formula_aliases <- list()
-        rv$alias_labels <- list()
-        rv$inestimable_terms <- character()
         # Pre-populate custom formula input via models callback
         models_exports$set_custom_formula(unname(default_formulas[1]))
         # Auto-fit default models so results are immediately available

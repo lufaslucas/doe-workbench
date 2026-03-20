@@ -2490,6 +2490,23 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
       }
     })
 
+    # ── Reset module UI to startup defaults ────────────────────────────
+    reset_ui <- function() {
+      updateTextInput(session, "alias_full_formula", value = "")
+      updateTextInput(session, "alias_check_formula", value = "")
+      updateNumericInput(session, "alias_threshold", value = ALIAS_CORR_THRESH)
+      updateRadioButtons(session, "design_matrix_mode", selected = "coded")
+      updateSliderInput(session, "splom_jitter", value = JITTER_DEFAULT)
+      updateSliderInput(session, "design_2d_jitter", value = JITTER_DEFAULT)
+      updateNumericInput(session, "power_sigma", value = 1)
+      updateNumericInput(session, "power_delta", value = 2)
+      updateNumericInput(session, "power_alpha", value = ALPHA_DEFAULT)
+      updateNumericInput(session, "power_max_order", value = 2)
+      updateNumericInput(session, "sim_sigma", value = 1)
+      updateNumericInput(session, "sim_grand_mean", value = 50)
+      updateTextInput(session, "sim_col_name", value = "Simulated_Y")
+    }
+
     # ── Return exports for use by other modules ──────────────────────────
     list(
       set_alias_full_formula = function(text) {
@@ -2497,7 +2514,8 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
       },
       set_alias_check_formula = function(text) {
         updateTextInput(session, "alias_check_formula", value = text)
-      }
+      },
+      reset_ui = reset_ui
     )
   })
 }

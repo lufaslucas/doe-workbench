@@ -9,46 +9,8 @@ server <- function(input, output, session) {
   output$build_info_text <- renderText(get_build_info())
 
   # ── Shared State ───────────────────────────────────────────────────────
-  rv <- reactiveValues(
-    # DATA LAYER (owned by: data_upload, data_generate, assign_roles)
-    data         = NULL,
-    roles        = list(),
-    col_types    = list(),       # colname -> "Factor" | "Numeric"
-    transforms    = list(),       # colname -> "none" | "centre" | "coding"
-    coding_values = list(),       # colname -> list(low = num, high = num)
-    level_labels  = list(),       # colname -> c("orig" = "label", ...)
-
-    # MODEL LAYER (owned by: models module)
-    formulas     = character(0),
-    formula_gen  = 0L,
-    models       = list(),
-    mc_results   = list(),
-    vif_df       = data.frame(),
-    prune_notes  = list(),
-    model_notes  = list(),
-    model_errors = list(),
-    excluded_obs = list(),
-
-    # DESIGN LAYER (owned by: design module)
-    design_metadata = list(),  # design_type, resolution, analysis_mode etc.
-    sim_data     = NULL,
-    formula_aliases = list(),
-    alias_labels    = list(),
-    inestimable_terms = character(),
-    pending_alias_resolution = NULL,
-    skip_auto_formula = FALSE,
-
-    # UI LAYER (owned by: explore, report)
-    selected_obs = NULL,       # Linked selection: integer vector of ._row_id values
-    report_items = list(),
-
-    # SESSION LAYER
-    session_path   = NULL,     # File path of last save/load (for quick re-save)
-
-    # READ-ONLY LAYER
-    read_only      = FALSE,    # TRUE when session is finalized
-    read_only_hash = NULL      # SHA-256 hash of unlock password
-  )
+  defaults <- make_default_rv()
+  rv <- do.call(reactiveValues, defaults)
 
   # ── Colour Theme Reactives ─────────────────────────────────────────────
   cat_palette <- reactive({
@@ -115,12 +77,23 @@ server <- function(input, output, session) {
       formulas      = rv$formulas,
       models        = rv$models,
       model_errors  = rv$model_errors,
+      model_notes   = rv$model_notes,
       mc_results    = rv$mc_results,
+      mc_on         = rv$mc_on,
+      mc_alpha      = rv$mc_alpha,
+      mc_terms      = rv$mc_terms,
+      mc_methods    = rv$mc_methods,
       vif_df        = rv$vif_df,
       excluded_obs  = rv$excluded_obs,
       prune_notes   = rv$prune_notes,
       design_metadata = rv$design_metadata,
       sim_data      = rv$sim_data,
+      # Formula/alias state (previously lost on save)
+      formula_aliases   = rv$formula_aliases,
+      alias_labels      = rv$alias_labels,
+      inestimable_terms = rv$inestimable_terms,
+      # UI state
+      report_items  = rv$report_items,
       settings      = list(
         cat_colour_theme  = input$cat_colour_theme,
         cont_colour_theme = input$cont_colour_theme
@@ -258,12 +231,25 @@ server <- function(input, output, session) {
     rv$formulas      <- state$formulas %||% character(0)
     rv$models        <- state$models %||% list()
     rv$model_errors  <- state$model_errors %||% list()
+    rv$model_notes   <- state$model_notes %||% list()
     rv$mc_results    <- state$mc_results %||% list()
+    rv$mc_on         <- state$mc_on %||% FALSE
+    rv$mc_alpha      <- state$mc_alpha %||% ALPHA_DEFAULT
+    rv$mc_terms      <- state$mc_terms %||% character(0)
+    rv$mc_methods    <- state$mc_methods %||% character(0)
     rv$vif_df        <- state$vif_df %||% data.frame()
     rv$excluded_obs  <- state$excluded_obs %||% list()
     rv$prune_notes   <- state$prune_notes %||% list()
     rv$sim_data      <- state$sim_data
     rv$design_metadata <- state$design_metadata %||% list()
+    # Formula/alias state (backward-compatible: defaults for old saves)
+    rv$formula_aliases          <- state$formula_aliases %||% list()
+    rv$alias_labels             <- state$alias_labels %||% list()
+    rv$inestimable_terms        <- state$inestimable_terms %||% character()
+    rv$pending_alias_resolution <- NULL
+    # UI state
+    rv$report_items  <- state$report_items %||% list()
+    rv$selected_obs  <- NULL
     rv$formula_gen   <- rv$formula_gen + 1L
     rv$session_path  <- path
 
@@ -282,6 +268,9 @@ server <- function(input, output, session) {
       if (!is.null(state$settings$cont_colour_theme))
         updateSelectInput(session, "cont_colour_theme", selected = state$settings$cont_colour_theme)
     }
+
+    # Sync module UI to loaded rv state (MC terms, methods, etc.)
+    tryCatch(models_exports$sync_ui_from_rv(), error = function(e) NULL)
 
     removeModal()
     msg <- if (isTRUE(state$read_only)) "Session restored (read-only mode)."
@@ -338,15 +327,56 @@ server <- function(input, output, session) {
     }
   })
 
+  # ── Full App Reset ────────────────────────────────────────────────────
+  # Note: references models_exports/design_exports which are defined later,
+  # but this function is only called at runtime from observeEvent handlers.
+  reset_app_to_defaults <- function() {
+    defs <- make_default_rv()
+    for (nm in names(defs)) {
+      rv[[nm]] <- defs[[nm]]
+    }
+    # Bump formula_gen to trigger downstream reactives
+    rv$formula_gen <- 1L
+    # Reset top-level UI controls
+    updateRadioButtons(session, "analysis_mode", selected = "comparative")
+    updateSelectInput(session, "cat_colour_theme", selected = "shell")
+    updateSelectInput(session, "cont_colour_theme", selected = "shell_warm")
+    updateNavbarPage(session, "main_nav", selected = "Data")
+    # Reset module-local UI inputs
+    tryCatch(models_exports$reset_ui(), error = function(e) NULL)
+    tryCatch(design_exports$reset_ui(), error = function(e) NULL)
+  }
+
+  observeEvent(input$reset_btn, {
+    showModal(modalDialog(
+      title = "Reset Session",
+      p("This will clear all data, roles, models, and results."),
+      p(tags$b("This action cannot be undone.")),
+      footer = tagList(
+        modalButton("Cancel"),
+        actionButton("reset_confirm_btn", "Reset Everything",
+                     class = "btn-danger", icon = icon("rotate-left"))
+      ),
+      easyClose = TRUE
+    ))
+  })
+
+  observeEvent(input$reset_confirm_btn, {
+    reset_app_to_defaults()
+    removeModal()
+    showNotification("Session reset to defaults.", type = "message", duration = 3)
+  })
+
   # ── Role-Based Reactive Helpers ────────────────────────────────────────
   reset_downstream <- function() {
-    rv$formulas    <- character(0)
-    rv$models      <- list()
-    rv$mc_results  <- list()
-    rv$vif_df      <- data.frame()
-    rv$sim_data    <- NULL
-    rv$design_metadata <- list()
-    rv$prune_notes <- list()
+    defs <- make_default_rv()
+    clear_formula_state(rv)
+    clear_model_state(rv)
+    # Design layer
+    rv$design_metadata <- defs$design_metadata
+    rv$sim_data        <- defs$sim_data
+    # UI layer
+    rv$selected_obs    <- defs$selected_obs
   }
 
   responses      <- reactive({ names(Filter(function(r) r == "Response",  rv$roles)) })
