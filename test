@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+if [[ $# -eq 0 ]]; then
+  exec R -q -e "testthat::test_dir('tests/testthat', reporter='summary')"
+fi
+
+TARGET="$1"
+
+if [[ -f "$ROOT_DIR/$TARGET" ]]; then
+  exec R -q -e "testthat::test_file('$TARGET')"
+fi
+
+if [[ -f "$ROOT_DIR/tests/testthat/$TARGET" ]]; then
+  exec R -q -e "testthat::test_file('tests/testthat/$TARGET')"
+fi
+
+echo "Usage:"
+echo "  ./test"
+echo "  ./test tests/testthat/test_state_management.R"
+echo "  ./test test_state_management.R"
+exit 1

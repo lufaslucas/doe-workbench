@@ -16,6 +16,43 @@ stamp_row_ids <- function(df) {
 }
 
 # ---------------------------------------------------------------------------
+# State-clearing helpers
+# Centralised routines so modules don't need to know every field name.
+# ---------------------------------------------------------------------------
+
+#' Clear all formula-related state on rv.
+#' Call when formulas are regenerated or data/roles change.
+clear_formula_state <- function(rv) {
+  defs <- make_default_rv()
+  rv$formulas                 <- defs$formulas
+  rv$formula_gen              <- rv$formula_gen + 1L
+  rv$formula_aliases          <- defs$formula_aliases
+  rv$alias_labels             <- defs$alias_labels
+  rv$inestimable_terms        <- defs$inestimable_terms
+  rv$pending_alias_resolution <- defs$pending_alias_resolution
+  rv$skip_auto_formula        <- defs$skip_auto_formula
+  invisible(rv)
+}
+
+#' Clear all fitted-model state on rv (including MC settings).
+#' Call when models need to be invalidated (e.g., formulas changed).
+clear_model_state <- function(rv) {
+  defs <- make_default_rv()
+  rv$models       <- defs$models
+  rv$mc_results   <- defs$mc_results
+  rv$mc_on        <- defs$mc_on
+  rv$mc_alpha     <- defs$mc_alpha
+  rv$mc_terms     <- defs$mc_terms
+  rv$mc_methods   <- defs$mc_methods
+  rv$vif_df       <- defs$vif_df
+  rv$prune_notes  <- defs$prune_notes
+  rv$model_notes  <- defs$model_notes
+  rv$model_errors <- defs$model_errors
+  rv$excluded_obs <- defs$excluded_obs
+  invisible(rv)
+}
+
+# ---------------------------------------------------------------------------
 # Custom theme: theme_minimal with facet panel outlines
 # ---------------------------------------------------------------------------
 theme_app <- function(...) {

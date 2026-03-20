@@ -416,6 +416,7 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
       }
 
       rv$formula_gen <- isolate(rv$formula_gen) + 1L
+      rv$pending_alias_resolution <- NULL
 
       # Compute aliases for each formula
       aliases <- list()
@@ -1057,6 +1058,62 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
       paste(n, "model(s) fitted:", paste(lines, collapse = "\n"))
     })
 
+    # ── Reset module UI to startup defaults ────────────────────────────
+    reset_ui <- function() {
+      updateTextAreaInput(session, "custom_formula", value = "")
+      updateNumericInput(session, "max_way", value = MAX_WAY_DEFAULT)
+      updateNumericInput(session, "poly_degree", value = POLY_DEGREE_DEFAULT)
+      updateCheckboxInput(session, "include_cov_fac", value = FALSE)
+      updateCheckboxInput(session, "include_blocks", value = TRUE)
+      updateCheckboxInput(session, "include_block_fac", value = FALSE)
+      updateCheckboxInput(session, "append_formulas", value = FALSE)
+      updateCheckboxInput(session, "mc_on", value = FALSE)
+      updateNumericInput(session, "mc_alpha_sidebar", value = ALPHA_DEFAULT)
+      updateNumericInput(session, "prune_alpha", value = ALPHA_DEFAULT)
+      updateSelectInput(session, "model_type", selected = "lm")
+      updateSelectInput(session, "weight_column", selected = "")
+    }
+
+    # ── Sync module UI to current rv state (e.g. after session load) ────
+    sync_ui_from_rv <- function() {
+      updateCheckboxInput(session, "mc_on", value = isTRUE(rv$mc_on))
+      updateNumericInput(session, "mc_alpha_sidebar", value = rv$mc_alpha %||% ALPHA_DEFAULT)
+      # mc_terms choices depend on fitted models; rebuild choices then select saved
+      if (length(rv$models) > 0) {
+        all_terms_raw <- unique(unlist(lapply(rv$models, function(m) {
+          a <- tryCatch(model_anova(m, type = 3), error = function(e) NULL)
+          if (!is.null(a)) rownames(a)[rownames(a) != "(Intercept)"] else character(0)
+        })))
+        factor_cols <- c(factors_(), blocks())
+        blk_cols    <- blocks()
+        cat_factor_terms <- all_terms_raw[sapply(all_terms_raw, function(t) {
+          parts <- strsplit(t, ":")[[1]]
+          all(parts %in% factor_cols) &&
+            all(sapply(parts, function(cn) {
+              if (cn %in% blk_cols) return(TRUE)
+              (rv$col_types[[cn]] %||% "Factor") == "Factor"
+            }))
+        })]
+        n_parts <- sapply(cat_factor_terms, function(t) length(strsplit(t, ":")[[1]]))
+        cat_factor_terms <- cat_factor_terms[order(-n_parts, cat_factor_terms)]
+        saved_terms <- rv$mc_terms %||% character(0)
+        sel_terms <- intersect(saved_terms, cat_factor_terms)
+        if (length(sel_terms) == 0) sel_terms <- cat_factor_terms
+        updateCheckboxGroupInput(session, "mc_terms",
+                                 choices = cat_factor_terms, selected = sel_terms)
+      }
+      saved_methods <- rv$mc_methods %||% character(0)
+      valid_methods <- c("student", "dunnett", "custom", "tukey")
+      sel_methods <- intersect(saved_methods, valid_methods)
+      if (length(sel_methods) == 0) sel_methods <- "tukey"
+      updateCheckboxGroupInput(session, "mc_method",
+                               choices = c("Student (unadjusted)" = "student",
+                                           "Dunnett (vs control)" = "dunnett",
+                                           "MaxT (custom pairs)" = "custom",
+                                           "Tukey (all pairs)" = "tukey"),
+                               selected = sel_methods)
+    }
+
     # ── Return exports for use by other modules ──────────────────────────
     list(
       do_fit_models = do_fit_models,
@@ -1064,7 +1121,9 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
         updateTextAreaInput(session, "custom_formula", value = text)
       },
       get_custom_formula = reactive({ input$custom_formula }),
-      get_active_response = reactive({ input$active_response })
+      get_active_response = reactive({ input$active_response }),
+      reset_ui = reset_ui,
+      sync_ui_from_rv = sync_ui_from_rv
     )
   })
 }

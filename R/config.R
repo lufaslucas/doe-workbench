@@ -80,6 +80,56 @@ MODEL_TYPES <- c("OLS (lm)" = "lm")   # Extensible: add "WLS" = "wls", "GLM" = "
 # ── Read-Only Mode ──────────────────────────────────────────────────────
 READONLY_HASH_ALGO  <- "sha256"       # digest algorithm for password hashing
 
+# ── Default State Constructor ──────────────────────────────────────────
+#' Canonical default values for every rv field.
+#' Used by reactiveValues() init, reset_app_to_defaults(), and save/load.
+make_default_rv <- function() {
+  list(
+    # DATA LAYER
+    data          = NULL,
+    roles         = list(),
+    col_types     = list(),
+    transforms    = list(),
+    coding_values = list(),
+    level_labels  = list(),
+
+    # MODEL LAYER
+    formulas      = character(0),
+    formula_gen   = 0L,
+    models        = list(),
+    mc_results    = list(),
+    mc_on         = FALSE,
+    mc_alpha      = ALPHA_DEFAULT,
+    mc_terms      = character(0),
+    mc_methods    = character(0),
+    vif_df        = data.frame(),
+    prune_notes   = list(),
+    model_notes   = list(),
+    model_errors  = list(),
+    excluded_obs  = list(),
+
+    # DESIGN LAYER
+    design_metadata          = list(),
+    sim_data                 = NULL,
+    formula_aliases          = list(),
+    alias_labels             = list(),
+    inestimable_terms        = character(),
+    pending_alias_resolution = NULL,
+    skip_auto_formula        = FALSE,
+
+    # UI LAYER
+    selected_obs  = NULL,
+    report_items  = list(),
+
+    # SESSION LAYER
+    session_path  = NULL,
+
+    # READ-ONLY LAYER
+    read_only      = FALSE,
+    read_only_hash = NULL
+  )
+}
+
 # ── Build Info ──────────────────────────────────────────────────────────
 get_build_info <- function() {
   # In dev mode, read live from git

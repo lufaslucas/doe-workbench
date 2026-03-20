@@ -14,7 +14,9 @@ ui <- navbarPage(
       actionButton("save_btn", "Save", class = "btn-sm",
                    icon = icon("download")),
       actionButton("load_btn", "Load", class = "btn-sm",
-                   icon = icon("upload"))
+                   icon = icon("upload")),
+      actionButton("reset_btn", "Reset", class = "btn-sm btn-outline-danger",
+                   icon = icon("rotate-left"))
     ),
     div(class = "build-info",
       style = "position:fixed; top:4px; right:260px; font-size:11px; color:#888; z-index:1050;",

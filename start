@@ -1,0 +1,25 @@
+#!/bin/bash
+# DoE Workbench launcher
+
+PORT=4564
+DIR="$(cd "$(dirname "$0")" && pwd)"
+
+stop_app() {
+  lsof -ti:$PORT | xargs kill -9 2>/dev/null
+  echo "Stopped DoE Workbench on port $PORT"
+}
+
+start_app() {
+  stop_app
+  sleep 1
+  echo "Starting DoE Workbench on http://localhost:$PORT ..."
+  export DOE_DEV_ROOT="$DIR"
+  Rscript -e "shiny::runApp('inst/app', port=${PORT}, launch.browser=FALSE)"
+}
+
+case "${1:-start}" in
+  start)   start_app ;;
+  stop)    stop_app ;;
+  restart) start_app ;;
+  *)       echo "Usage: ./start [start|stop|restart]" ;;
+esac
