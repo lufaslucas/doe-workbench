@@ -265,8 +265,14 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
         sel <- if (length(resps) > 0) resps[1] else NULL
         rv$model_active_response <- sel
       }
-      updateSelectInput(session, "active_response", choices = resps,
-                        selected = sel %||% "")
+      if (length(resps) == 0) {
+        updateSelectInput(session, "active_response",
+                          choices = c("(none)" = ""),
+                          selected = "")
+      } else {
+        updateSelectInput(session, "active_response", choices = resps,
+                          selected = sel %||% "")
+      }
     })
 
     # ── Weight column selector ─────────────────────────────────────────
@@ -1149,8 +1155,14 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
         sel_resp <- if (length(resps) > 0) resps[1] else NULL
         rv$model_active_response <- sel_resp
       }
-      updateSelectInput(session, "active_response", choices = resps,
-                        selected = sel_resp %||% "")
+      if (length(resps) == 0) {
+        updateSelectInput(session, "active_response",
+                          choices = c("(none)" = ""),
+                          selected = "")
+      } else {
+        updateSelectInput(session, "active_response", choices = resps,
+                          selected = sel_resp %||% "")
+      }
       updateTextAreaInput(session, "custom_formula", value = rv$model_custom_formula %||% "")
       updateNumericInput(session, "max_way", value = rv$model_max_way %||% MAX_WAY_DEFAULT)
       updateNumericInput(session, "poly_degree", value = rv$model_poly_degree %||% POLY_DEGREE_DEFAULT)
@@ -1216,8 +1228,8 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
         set_model_custom_formula(rv, text)
         updateTextAreaInput(session, "custom_formula", value = rv$model_custom_formula)
       },
-      get_custom_formula = reactive({ rv$model_custom_formula %||% input$custom_formula }),
-      get_active_response = reactive({ rv$model_active_response %||% input$active_response }),
+      get_custom_formula = reactive({ rv$model_custom_formula }),
+      get_active_response = reactive({ rv$model_active_response }),
       reset_ui = reset_ui,
       sync_ui_from_rv = sync_ui_from_rv
     )

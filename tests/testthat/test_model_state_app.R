@@ -68,7 +68,7 @@ test_that("reset clears visible Models spec inputs back to defaults", {
   click_tab(app, "Models")
 
   expect_equal(app$get_value(input = "models-custom_formula"), "")
-  expect_equal(app$get_value(input = "models-max_way"), MAX_WAY_DEFAULT)
+  expect_equal(app$get_value(input = "models-max_way"), 2)
   expect_identical(app$get_value(input = "models-append_formulas"), FALSE)
   expect_identical(app$get_value(input = "models-include_blocks"), TRUE)
 })
