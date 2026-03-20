@@ -13,6 +13,7 @@ server <- function(input, output, session) {
     col_types    = list(),       # colname -> "Factor" | "Numeric"
     transforms    = list(),       # colname -> "none" | "centre" | "coding"
     coding_values = list(),       # colname -> list(low = num, high = num)
+    level_labels  = list(),       # colname -> c("orig" = "label", ...)
 
     # MODEL LAYER (owned by: models module)
     formulas     = character(0),
@@ -26,6 +27,7 @@ server <- function(input, output, session) {
     excluded_obs = list(),
 
     # DESIGN LAYER (owned by: design module)
+    design_metadata = list(),  # design_type, resolution, analysis_mode etc.
     sim_data     = NULL,
     formula_aliases = list(),
     alias_labels    = list(),
@@ -106,6 +108,7 @@ server <- function(input, output, session) {
       col_types     = rv$col_types,
       transforms    = rv$transforms,
       coding_values = rv$coding_values,
+      level_labels  = rv$level_labels,
       formulas      = rv$formulas,
       models        = rv$models,
       model_errors  = rv$model_errors,
@@ -113,6 +116,7 @@ server <- function(input, output, session) {
       vif_df        = rv$vif_df,
       excluded_obs  = rv$excluded_obs,
       prune_notes   = rv$prune_notes,
+      design_metadata = rv$design_metadata,
       sim_data      = rv$sim_data,
       settings      = list(
         cat_colour_theme  = input$cat_colour_theme,
@@ -247,6 +251,7 @@ server <- function(input, output, session) {
     rv$col_types     <- state$col_types %||% list()
     rv$transforms    <- state$transforms %||% list()
     rv$coding_values <- state$coding_values %||% list()
+    rv$level_labels  <- state$level_labels %||% list()
     rv$formulas      <- state$formulas %||% character(0)
     rv$models        <- state$models %||% list()
     rv$model_errors  <- state$model_errors %||% list()
@@ -255,6 +260,7 @@ server <- function(input, output, session) {
     rv$excluded_obs  <- state$excluded_obs %||% list()
     rv$prune_notes   <- state$prune_notes %||% list()
     rv$sim_data      <- state$sim_data
+    rv$design_metadata <- state$design_metadata %||% list()
     rv$formula_gen   <- rv$formula_gen + 1L
     rv$session_path  <- path
 
@@ -336,6 +342,7 @@ server <- function(input, output, session) {
     rv$mc_results  <- list()
     rv$vif_df      <- data.frame()
     rv$sim_data    <- NULL
+    rv$design_metadata <- list()
     rv$prune_notes <- list()
   }
 
@@ -344,6 +351,7 @@ server <- function(input, output, session) {
   covariates     <- reactive({ names(Filter(function(r) r == "Covariate", rv$roles)) })
   blocks         <- reactive({ names(Filter(function(r) r == "Block",     rv$roles)) })
   run_orders     <- reactive({ names(Filter(function(r) r == "Run Order", rv$roles)) })
+  weights_col    <- reactive({ names(Filter(function(r) r == "Weight",    rv$roles)) })
   all_covariates <- reactive({ unique(c(covariates(), run_orders())) })
 
   treatment <- reactive({
@@ -367,12 +375,14 @@ server <- function(input, output, session) {
     covariates     = covariates,
     blocks         = blocks,
     run_orders     = run_orders,
-    all_covariates = all_covariates
+    all_covariates = all_covariates,
+    weights_col    = weights_col
   )
 
   shared_reactives <- list(
     treatment       = treatment,
-    treatment_label = treatment_label
+    treatment_label = treatment_label,
+    analysis_mode   = reactive(input$analysis_mode %||% "comparative")
   )
 
   colour_theme <- list(
@@ -492,6 +502,19 @@ server <- function(input, output, session) {
                       mc_terms   = reactive(rv$mc_terms),
                       mc_methods = reactive(rv$mc_methods)
                     ))
+
+  # ── Sync Models formulas → Design alias formula ────────────────────
+  observeEvent(rv$formulas, {
+    if (length(rv$formulas) == 0) return()
+    # Use the largest formula (most terms) as the Design model formula
+    n_terms <- sapply(rv$formulas, function(f) {
+      rhs <- sub("^[^~]+~\\s*", "", f)
+      length(trimws(strsplit(rhs, "\\+")[[1]]))
+    })
+    largest <- rv$formulas[[which.max(n_terms)]]
+    rhs <- trimws(sub("^[^~]+~\\s*", "", largest))
+    design_exports$set_alias_full_formula(rhs)
+  }, ignoreInit = TRUE)
 
   # ── Linked Selection: global observers ───────────────────────────────
   # event_data() must be called inside observe() to properly set up its

@@ -80,20 +80,26 @@ type3_wide <- function(models_list, term_roles = NULL, sort_mode = "category") {
 
 # ---------------------------------------------------------------------------
 # rmse_summary()
-# Returns data.frame: Model | RMSE | R2 | AdjR2 | AIC | BIC | PRESS_RMSE | df_resid
+# Returns data.frame: Model | RMSE | R2 | AdjR2 | AIC | BIC | PRESS_RMSE | PRESS_R2 | df_resid
 # ---------------------------------------------------------------------------
 rmse_summary <- function(models_list) {
   if (length(models_list) == 0) return(data.frame())
 
-  # PRESS RMSE = sqrt(PRESS / n) where PRESS = sum of (residual / (1 - hat_ii))^2
-  calc_press_rmse <- function(m) {
+  # PRESS statistics: PRESS = sum of (residual / (1 - hat_ii))^2
+  # PRESS_RMSE = sqrt(PRESS / n), PRESS_R2 = 1 - PRESS / SS_total
+  calc_press_stats <- function(m) {
     tryCatch({
       h <- model_hat_values(m)
       r <- residuals(m)
       press <- sum((r / (1 - h))^2)
-      sqrt(press / length(r))
-    }, error = function(e) NA_real_)
+      ss_total <- sum((model.response(model.frame(m)) - mean(model.response(model.frame(m))))^2)
+      press_rmse <- sqrt(press / length(r))
+      press_r2 <- if (ss_total > 0) 1 - press / ss_total else NA_real_
+      list(press_rmse = press_rmse, press_r2 = press_r2)
+    }, error = function(e) list(press_rmse = NA_real_, press_r2 = NA_real_))
   }
+
+  press_stats <- lapply(models_list, calc_press_stats)
 
   data.frame(
     Model      = names(models_list),
@@ -102,7 +108,8 @@ rmse_summary <- function(models_list) {
     Adj_R2     = sapply(models_list, function(m) round(summary(m)$adj.r.squared, 4)),
     AIC        = sapply(models_list, function(m) round(AIC(m), 2)),
     BIC        = sapply(models_list, function(m) round(BIC(m), 2)),
-    PRESS_RMSE = sapply(models_list, function(m) round(calc_press_rmse(m), 4)),
+    PRESS_RMSE = sapply(press_stats, function(ps) round(ps$press_rmse, 4)),
+    PRESS_R2   = sapply(press_stats, function(ps) round(ps$press_r2, 4)),
     df_resid   = sapply(models_list, function(m) df.residual(m)),
     stringsAsFactors = FALSE,
     row.names = NULL
@@ -115,6 +122,16 @@ rmse_summary <- function(models_list) {
 # ---------------------------------------------------------------------------
 order_anova_terms <- function(wide, term_roles = NULL, sort_mode = "category") {
   if (nrow(wide) == 0) return(wide)
+
+  # Formula order: keep as-is (ensure Residuals last)
+  if (sort_mode == "formula") {
+    res_idx <- which(wide$term == "Residuals")
+    if (length(res_idx) > 0 && res_idx != nrow(wide)) {
+      wide <- rbind(wide[-res_idx, , drop = FALSE], wide[res_idx, , drop = FALSE])
+      rownames(wide) <- NULL
+    }
+    return(wide)
+  }
 
   if (sort_mode == "significance") {
     p_cols <- grep("_p$", names(wide), value = TRUE)
@@ -194,7 +211,7 @@ classify_anova_terms <- function(terms, factor_cols, block_cols, cov_cols) {
 # ---------------------------------------------------------------------------
 # vif_summary()
 # Compute VIF for each model; return wide data.frame
-# Values are GVIF^(1/(2*Df)) which is comparable to sqrt(VIF)
+# For multi-df terms, uses (GVIF^(1/(2*Df)))^2 = GVIF^(1/Df) which is on the VIF scale
 # ---------------------------------------------------------------------------
 vif_summary <- function(models_list) {
   if (length(models_list) == 0) return(data.frame())
@@ -207,12 +224,13 @@ vif_summary <- function(models_list) {
       v <- model_vif(m)
       if (is.matrix(v)) {
         # Multi-df terms: matrix with GVIF, Df, GVIF^(1/(2*Df))
+        # Square GVIF^(1/(2*Df)) to get VIF-comparable values
         gcol <- "GVIF^(1/(2*Df))"
-        vif_vals <- if (gcol %in% colnames(v)) v[, gcol] else v[, 1]^(1/(2*v[, 2]))
+        vif_vals <- if (gcol %in% colnames(v)) v[, gcol]^2 else v[, 1]^(1/v[, 2])
         data.frame(Term = rownames(v), VIF = round(vif_vals, 2),
                    Model = mname, stringsAsFactors = FALSE)
       } else {
-        # Single-df terms: named numeric vector
+        # Single-df terms: named numeric vector (already on VIF scale)
         data.frame(Term = names(v), VIF = round(v, 2),
                    Model = mname, stringsAsFactors = FALSE)
       }

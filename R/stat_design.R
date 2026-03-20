@@ -151,20 +151,27 @@ compute_aliases <- function(data, full_terms, check_terms = NULL,
   cor_mat <- cor(Xmat)
 
   # Find all aliases: any pair with |cor| >= threshold
-  # Label whether each term is in the full model or alias-only
+  # Also flag within-model collinearity at a lower threshold (|r| > 0.5)
+  COLLINEARITY_THRESHOLD <- 0.5
   nc <- length(valid_terms)
   aliases <- list()
   if (nc >= 2) {
     for (i in 1:(nc - 1)) {
       for (j in (i + 1):nc) {
         r <- cor_mat[i, j]
-        if (!is.na(r) && abs(r) >= threshold) {
+        if (is.na(r)) next
+        both_in <- valid_terms[i] %in% full_terms && valid_terms[j] %in% full_terms
+        # Report at alias threshold OR within-model collinearity > 0.5
+        if (abs(r) >= threshold || (both_in && abs(r) > COLLINEARITY_THRESHOLD)) {
+          severity <- if (abs(r) >= threshold) "Aliased"
+                      else if (abs(r) >= 0.8) "High collinearity"
+                      else "Moderate collinearity"
           aliases <- c(aliases, list(data.frame(
             Term_1      = valid_terms[i],
             Term_2      = valid_terms[j],
             Correlation = round(r, 3),
-            In_model    = if (valid_terms[i] %in% full_terms && valid_terms[j] %in% full_terms)
-                            "Both in model"
+            Severity    = severity,
+            In_model    = if (both_in) "Both in model"
                           else if (valid_terms[i] %in% full_terms || valid_terms[j] %in% full_terms)
                             "One in model"
                           else "Neither in model",
@@ -176,21 +183,163 @@ compute_aliases <- function(data, full_terms, check_terms = NULL,
   }
 
   if (length(aliases) == 0)
-    return(data.frame(Message = "No aliases detected at this threshold."))
-  do.call(rbind, aliases)
+    return(data.frame(Message = "No aliases or collinearity detected."))
+  result <- do.call(rbind, aliases)
+  result[order(-abs(result$Correlation)), , drop = FALSE]
+}
+
+# ---------------------------------------------------------------------------
+# design_summary()
+# Build a plain-language design summary: df budget, estimability,
+# confounded pairs, replication, and power notes.
+# Returns a list of sections, each with title, level (green/amber/red), items.
+# ---------------------------------------------------------------------------
+design_summary <- function(data, full_terms, check_terms = NULL,
+                           threshold = 0.99, col_types = list()) {
+  sections <- list()
+  n <- nrow(data)
+
+  # 1. Degrees of freedom budget
+  df_items <- list()
+  df_items <- c(df_items, list(paste0("Total runs: ", n)))
+
+  # Build model matrix to count model df
+  tryCatch({
+    df_work <- data
+    for (cn in names(df_work)) {
+      if (!is.numeric(df_work[[cn]])) {
+        df_work[[cn]] <- as.numeric(as.factor(df_work[[cn]]))
+        df_work[[cn]] <- df_work[[cn]] - mean(df_work[[cn]])
+      }
+    }
+    f_str <- paste("~", paste(full_terms, collapse = " + "))
+    mm <- model.matrix(as.formula(f_str), data = df_work)
+    model_df <- ncol(mm) - 1  # exclude intercept
+    resid_df <- n - model_df - 1
+    df_items <- c(df_items, list(
+      paste0("Model df: ", model_df, " (", length(full_terms), " terms)"),
+      paste0("Residual df: ", resid_df)
+    ))
+    df_level <- if (resid_df == 0) "red"
+                else if (resid_df <= 2) "amber"
+                else "green"
+    if (resid_df == 0)
+      df_items <- c(df_items, list("Saturated model \u2014 no df for error estimation or F-tests."))
+    else if (resid_df <= 2)
+      df_items <- c(df_items, list(paste0("Very few residual df (", resid_df, "). F-tests will have low power.")))
+
+    # Pure error df from replicates
+    treatments <- apply(df_work[, setdiff(names(df_work), names(df_work)[sapply(df_work, function(x) all(x == x[1]))]), drop = FALSE], 1, paste, collapse = "_")
+    rep_table <- table(treatments)
+    n_reps <- sum(rep_table > 1)
+    pe_df <- sum(rep_table - 1)
+    if (pe_df > 0)
+      df_items <- c(df_items, list(paste0("Pure error df: ", pe_df, " (from ", n_reps, " replicated treatment(s))")))
+    else
+      df_items <- c(df_items, list("No replicated treatments \u2014 cannot estimate pure error or lack-of-fit."))
+  }, error = function(e) {
+    df_level <- "amber"
+    df_items <- c(df_items, list(paste0("Could not compute model matrix: ", e$message)))
+  })
+  sections$df <- list(title = "Degrees of Freedom Budget", level = df_level %||% "amber", items = df_items)
+
+  # 2. Confounded pairs
+  alias_result <- compute_aliases(data, full_terms, check_terms, threshold)
+  conf_items <- list()
+  conf_level <- "green"
+  if ("Correlation" %in% names(alias_result)) {
+    aliased <- alias_result[alias_result$Severity == "Aliased", , drop = FALSE]
+    high_col <- alias_result[alias_result$Severity == "High collinearity", , drop = FALSE]
+    mod_col <- alias_result[alias_result$Severity == "Moderate collinearity", , drop = FALSE]
+
+    if (nrow(aliased) > 0) {
+      conf_level <- "red"
+      for (i in seq_len(nrow(aliased)))
+        conf_items <- c(conf_items, list(paste0(
+          aliased$Term_1[i], " and ", aliased$Term_2[i],
+          " are fully confounded (r = ", aliased$Correlation[i], "). ",
+          "Their effects cannot be separated.")))
+    }
+    if (nrow(high_col) > 0) {
+      if (conf_level != "red") conf_level <- "amber"
+      for (i in seq_len(nrow(high_col)))
+        conf_items <- c(conf_items, list(paste0(
+          high_col$Term_1[i], " and ", high_col$Term_2[i],
+          " are highly correlated (r = ", high_col$Correlation[i], "). ",
+          "Estimates will be unstable.")))
+    }
+    if (nrow(mod_col) > 0) {
+      if (conf_level == "green") conf_level <- "amber"
+      for (i in seq_len(min(nrow(mod_col), 5)))
+        conf_items <- c(conf_items, list(paste0(
+          mod_col$Term_1[i], " and ", mod_col$Term_2[i],
+          " have moderate correlation (r = ", mod_col$Correlation[i], ").")))
+      if (nrow(mod_col) > 5)
+        conf_items <- c(conf_items, list(paste0("... and ", nrow(mod_col) - 5, " more moderately correlated pairs.")))
+    }
+  }
+  if (length(conf_items) == 0) conf_items <- list("No confounding or collinearity detected among model terms.")
+  sections$confounding <- list(title = "Confounding & Collinearity", level = conf_level, items = conf_items)
+
+  # 3. Replication
+  rep_items <- list()
+  rep_level <- "green"
+  tryCatch({
+    # Count unique treatment combinations (factor columns only)
+    fac_cols <- names(data)[!sapply(data, is.numeric)]
+    if (length(fac_cols) > 0) {
+      trt_combos <- apply(data[, fac_cols, drop = FALSE], 1, paste, collapse = "_")
+      trt_table <- table(trt_combos)
+      n_unique <- length(trt_table)
+      n_replicated <- sum(trt_table > 1)
+      rep_items <- c(rep_items, list(
+        paste0(n_unique, " unique treatment combination(s) across ", n, " runs."),
+        paste0(n_replicated, " treatment(s) replicated (", sum(trt_table > 1), " with reps).")
+      ))
+      if (n_replicated == 0) {
+        rep_level <- "amber"
+        rep_items <- c(rep_items, list("No replication \u2014 cannot estimate pure error."))
+      }
+      if (any(trt_table > 1) && max(trt_table) != min(trt_table[trt_table > 1])) {
+        rep_items <- c(rep_items, list("Unequal replication across treatments."))
+      }
+    } else {
+      rep_items <- c(rep_items, list("All columns are numeric \u2014 replication assessment not applicable for continuous designs."))
+    }
+  }, error = function(e) NULL)
+  sections$replication <- list(title = "Replication", level = rep_level, items = rep_items)
+
+  sections
 }
 
 # ---------------------------------------------------------------------------
 # design_power()
 # Compute power for each term based on the design matrix.
 # delta = minimum detectable effect, sigma = error SD
+# If `model_terms` is provided, use those terms directly.
+# Otherwise generate from `factors` up to `max_order`.
 # Returns data.frame: Term | df | SE | Power
 # ---------------------------------------------------------------------------
-design_power <- function(data, factors, sigma, delta, alpha = 0.05, max_order = 2) {
-  if (length(factors) == 0 || sigma <= 0) return(data.frame())
+design_power <- function(data, factors, sigma, delta, alpha = 0.05, max_order = 2,
+                          model_terms = NULL) {
+  if (sigma <= 0) return(data.frame())
 
-  df <- data[, factors, drop = FALSE]
-  for (col in factors) {
+  # Centre numeric columns for power calculation
+  df <- data
+  # Identify all columns referenced by model terms (factors, blocks, covariates)
+  if (!is.null(model_terms) && length(model_terms) > 0) {
+    raw_parts <- unique(unlist(lapply(model_terms, function(t) {
+      if (grepl("^I\\(", t)) {
+        inner <- gsub("^I\\((.+)\\)$", "\\1", t)
+        return(gsub("\\^.*", "", inner))
+      }
+      strsplit(t, ":")[[1]]
+    })))
+    all_vars <- unique(c(factors, raw_parts))
+  } else {
+    all_vars <- factors
+  }
+  for (col in intersect(all_vars, names(df))) {
     if (!is.numeric(df[[col]])) {
       df[[col]] <- as.numeric(as.factor(df[[col]]))
     }
@@ -198,10 +347,17 @@ design_power <- function(data, factors, sigma, delta, alpha = 0.05, max_order = 
   }
 
   n <- nrow(df)
-  all_terms <- character()
-  for (order in seq_len(min(max_order, length(factors)))) {
-    combos <- combn(factors, order, simplify = FALSE)
-    all_terms <- c(all_terms, sapply(combos, paste, collapse = ":"))
+
+  # Determine terms: use model_terms if provided, else generate combinatorially
+  if (!is.null(model_terms) && length(model_terms) > 0) {
+    all_terms <- model_terms
+  } else {
+    if (length(factors) == 0) return(data.frame())
+    all_terms <- character()
+    for (order in seq_len(min(max_order, length(factors)))) {
+      combos <- combn(factors, order, simplify = FALSE)
+      all_terms <- c(all_terms, sapply(combos, paste, collapse = ":"))
+    }
   }
 
   p_total <- length(all_terms)
@@ -210,10 +366,30 @@ design_power <- function(data, factors, sigma, delta, alpha = 0.05, max_order = 
     return(data.frame(Term = all_terms, SE = NA, Power = NA,
                       Note = "Insufficient residual df"))
 
-  results <- lapply(all_terms, function(term) {
+  # Build column for each term (interactions, polynomials)
+  build_col <- function(term) {
+    # Handle I(x^n) polynomial terms
+    if (grepl("^I\\(", term)) {
+      inner <- gsub("^I\\((.+)\\)$", "\\1", term)
+      if (grepl("\\^", inner)) {
+        pts <- strsplit(inner, "\\^")[[1]]
+        var_name <- trimws(pts[1])
+        pw <- as.numeric(trimws(pts[2]))
+        if (var_name %in% names(df) && !is.na(pw)) return(df[[var_name]]^pw)
+      }
+      return(NULL)
+    }
     parts <- strsplit(term, ":")[[1]]
+    if (!all(parts %in% names(df))) return(NULL)
     x <- rep(1, n)
     for (p_name in parts) x <- x * df[[p_name]]
+    x
+  }
+
+  results <- lapply(all_terms, function(term) {
+    x <- build_col(term)
+    if (is.null(x)) return(data.frame(Term = term, SE = NA, Power = NA_real_,
+                                       stringsAsFactors = FALSE))
     ss_x <- sum(x^2)
     if (ss_x == 0) return(data.frame(Term = term, SE = NA, Power = 0))
     se <- sigma / sqrt(ss_x)

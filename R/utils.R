@@ -135,6 +135,30 @@ scale_colour_cat <- function(theme_name, ...) {
 }
 
 # ---------------------------------------------------------------------------
+# build_colour_choices() — unified colour-by dropdown construction
+# Pass all_cols for a flat list (Explore), or factors/blocks/covariates for
+# labelled groups (Results). treatment_label = NULL omits .treatment.
+# ---------------------------------------------------------------------------
+build_colour_choices <- function(factors = NULL, blocks = NULL, covariates = NULL,
+                                 all_cols = NULL, treatment_label = NULL,
+                                 include_treatment = TRUE) {
+  ch <- c("None" = "none")
+  if (include_treatment && !is.null(treatment_label))
+    ch <- c(ch, setNames(".treatment", treatment_label))
+  if (!is.null(all_cols)) {
+    for (cn in all_cols) ch <- c(ch, setNames(cn, cn))
+  } else {
+    if (!is.null(factors))
+      for (f in factors) ch <- c(ch, setNames(f, f))
+    if (!is.null(blocks))
+      for (b in blocks) ch <- c(ch, setNames(b, paste0(b, " (block)")))
+    if (!is.null(covariates))
+      for (cv in covariates) ch <- c(ch, setNames(cv, paste0(cv, " (cov)")))
+  }
+  ch
+}
+
+# ---------------------------------------------------------------------------
 # Smart jitter: only jitter replicated x-groups
 # ---------------------------------------------------------------------------
 smart_jitter_width <- function(data, x_col, jitter_amount, only_replicated = TRUE) {
@@ -153,6 +177,48 @@ position_smart_jitter <- function(data, x_col, jitter_amount, only_replicated = 
   } else {
     position_jitter(width = jitter_amount, height = 0)
   }
+}
+
+# ---------------------------------------------------------------------------
+# format_pvalue()
+# Format p-values for display: <0.0001 for tiny, conservative rounding near alpha
+# ---------------------------------------------------------------------------
+format_pvalue <- function(p, alpha = ALPHA_DEFAULT, digits = PVALUE_DIGITS) {
+  vapply(p, function(pv) {
+    if (is.na(pv)) return(NA_character_)
+    # Tiny p-values that round to 0
+    if (round(pv, digits) == 0) return(PVALUE_FLOOR_LABEL)
+    # Conservative rounding near alpha boundary:
+    # If true p > alpha but naive rounding would show exactly alpha, round UP
+    rounded <- round(pv, digits)
+    if (pv > alpha && rounded <= alpha) {
+      # Ceiling to next unit at given precision
+      unit <- 10^(-digits)
+      return(formatC(ceiling(pv / unit) * unit, format = "f", digits = digits))
+    }
+    # If true p <= alpha but naive rounding would show > alpha, round DOWN
+    if (pv <= alpha && rounded > alpha) {
+      unit <- 10^(-digits)
+      return(formatC(floor(pv / unit) * unit, format = "f", digits = digits))
+    }
+    formatC(rounded, format = "f", digits = digits)
+  }, character(1))
+}
+
+# ---------------------------------------------------------------------------
+# format_pvalue_dt()
+# Pre-format p-value columns in a data.frame for DT display.
+# Replaces numeric p-value cols with formatted character strings while
+# keeping a hidden shadow column (prefixed ._p_) for styleInterval colouring.
+# ---------------------------------------------------------------------------
+format_pvalue_dt <- function(df, p_cols, alpha = ALPHA_DEFAULT, digits = PVALUE_DIGITS) {
+  for (pc in p_cols) {
+    if (!(pc %in% names(df))) next
+    shadow <- paste0("._p_", pc)
+    df[[shadow]] <- df[[pc]]  # Keep numeric copy for conditional styling
+    df[[pc]] <- format_pvalue(df[[pc]], alpha = alpha, digits = digits)
+  }
+  df
 }
 
 # ---------------------------------------------------------------------------

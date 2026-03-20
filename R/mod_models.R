@@ -9,6 +9,12 @@ mod_models_ui <- function(id) {
         wellPanel(
           h4("Model Builder"),
           selectInput(ns("active_response"), "Response variable", choices = NULL),
+          fluidRow(
+            column(6, selectInput(ns("model_type"), "Model type",
+                                  choices = MODEL_TYPES, selected = "lm")),
+            column(6, selectInput(ns("weight_column"), "Weight column",
+                                  choices = c("(none)" = ""), selected = ""))
+          ),
           h5("Factor terms"),
           numericInput(ns("max_way"), "Max factor interaction order", value = 2, min = 1, max = 5),
           conditionalPanel(
@@ -24,9 +30,16 @@ mod_models_ui <- function(id) {
           checkboxInput(ns("include_blocks"), "Include blocks", value = TRUE),
           checkboxInput(ns("include_block_fac"), "Include block \u00d7 factor interactions", value = FALSE),
           hr(),
-          actionButton(ns("generate_formulas"), "Generate Formulas",
-                       class = "btn-primary btn-sm w-100 mb-2",
-                       icon = icon("cogs")),
+          fluidRow(
+            column(7,
+              actionButton(ns("generate_formulas"), "Generate Formulas",
+                           class = "btn-primary btn-sm w-100 mb-2",
+                           icon = icon("cogs"))
+            ),
+            column(5,
+              checkboxInput(ns("append_formulas"), "Append", value = FALSE)
+            )
+          ),
           div(
             style = "margin-bottom: 6px;",
             actionButton(ns("select_all_formulas"), "Select All",
@@ -39,7 +52,20 @@ mod_models_ui <- function(id) {
           ),
           hr(),
           h5("Custom formula"),
-          textInput(ns("custom_formula"), NULL, placeholder = "y ~ A + B + A:B"),
+          selectInput(ns("copy_from_formula"), "Start from existing formula",
+                      choices = c("(blank)" = ""), width = "100%"),
+          tags$div(style = "margin-bottom: 6px;",
+            actionButton(ns("add_main_effects"), "+ Main Effects",
+                         class = "btn-xs btn-outline-secondary"),
+            actionButton(ns("add_2way"), "+ 2-way",
+                         class = "btn-xs btn-outline-secondary"),
+            actionButton(ns("add_3way"), "+ 3-way",
+                         class = "btn-xs btn-outline-secondary")
+          ),
+          textAreaInput(ns("custom_formula"), NULL,
+                        placeholder = "y ~ A + B + A:B",
+                        rows = 3, resize = "vertical"),
+          tags$style(sprintf("#%s { font-family: monospace; font-size: 12px; }", ns("custom_formula"))),
           uiOutput(ns("formula_custom_chooser")),
           actionButton(ns("add_custom"), "Add Custom", class = "btn-sm btn-outline-primary"),
           hr(),
@@ -107,6 +133,7 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
     blocks         <- role_selectors$blocks
     run_orders     <- role_selectors$run_orders
     all_covariates <- role_selectors$all_covariates
+    weights_col    <- role_selectors$weights_col
 
     # Unpack shared reactives
     treatment       <- shared_reactives$treatment
@@ -185,6 +212,14 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
       updateSelectInput(session, "active_response", choices = responses())
     })
 
+    # ── Weight column selector ─────────────────────────────────────────
+    observe({
+      wc <- weights_col()
+      updateSelectInput(session, "weight_column",
+                        choices = c("(none)" = "", wc),
+                        selected = input$weight_column %||% "")
+    })
+
     # ── Dynamic covariate selector for formula generator ─────────────────
     output$formula_cov_selector_ui <- renderUI({
       covs <- all_covariates()
@@ -232,10 +267,14 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
             aliased_terms <- intersect(term_labels, names(labels))
             if (length(aliased_terms) > 0) {
               lines <- lapply(aliased_terms, function(t) {
+                # Show the confounded alias label (e.g. "A:B" represents "A:B + C:D")
+                alias_lbl <- labels[[t]]
                 tags$div(style = "font-size: 12px; color: #856404;",
                   icon("exclamation-triangle", style = "color: #e6a817; font-size: 11px;"),
-                  tags$span(style = "color: #856404;", " aliased: "),
-                  tags$code(style = "font-size: 11px;", labels[[t]])
+                  tags$span(style = "color: #856404;",
+                    paste0(" Term '", t, "' represents ")),
+                  tags$code(style = "font-size: 11px; font-weight: bold;", alias_lbl),
+                  tags$span(style = "color: #856404;", " (confounded)")
                 )
               })
               alias_info <- div(style = "margin: -6px 0 4px 48px;",
@@ -280,6 +319,15 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
         )
       }))
     })
+
+    # ── Apply model defaults from design metadata ──────────────────────
+    observeEvent(rv$design_metadata, {
+      md <- rv$design_metadata$model_defaults
+      if (!is.null(md)) {
+        if (!is.null(md$max_way)) updateNumericInput(session, "max_way", value = md$max_way)
+        if (!is.null(md$poly_degree)) updateNumericInput(session, "poly_degree", value = md$poly_degree)
+      }
+    }, ignoreInit = TRUE)
 
     # ── Design-Aware Formula Limits ──────────────────────────────────────
     # Constrain max_way and poly_degree based on data and design rank
@@ -356,6 +404,17 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
           max_covariates     = max_cov
         )
       }
+      # Append mode: merge with existing formulas (skip duplicates)
+      if (isTRUE(input$append_formulas) && length(rv$formulas) > 0) {
+        existing <- rv$formulas
+        new_only <- setdiff(formulas, existing)
+        if (length(new_only) == 0) {
+          showNotification("No new formulas to add.", type = "message", duration = 3)
+          return()
+        }
+        formulas <- c(existing, new_only)
+      }
+
       rv$formula_gen <- isolate(rv$formula_gen) + 1L
 
       # Compute aliases for each formula
@@ -466,7 +525,7 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
       f <- trimws(input$custom_formula)
       rv$formula_gen <- isolate(rv$formula_gen) + 1L
       rv$formulas <- c(rv$formulas, setNames(f, f))
-      updateTextInput(session, "custom_formula", value = "")
+      updateTextAreaInput(session, "custom_formula", value = "")
 
       # Check aliases for the new formula
       af <- tryCatch(detect_formula_aliases(rv$data, f), error = function(e) data.frame())
@@ -486,24 +545,114 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
       term <- input$custom_term_click$term
       if (is.null(term)) return()
       current <- input$custom_formula %||% ""
-      # If empty or just "y ~ " placeholder, start with response ~ term
       stripped <- trimws(current)
       if (nchar(stripped) == 0) {
-        # Auto-prepend response variable
         resp <- input$active_response %||% "Y"
-        updateTextInput(session, "custom_formula", value = paste0(resp, " ~ ", term))
+        updateTextAreaInput(session, "custom_formula", value = paste0(resp, " ~ ", term))
       } else {
-        # Extract RHS (after ~)
         if (grepl("~", stripped)) {
           rhs <- trimws(sub("^[^~]+~", "", stripped))
           existing <- trimws(strsplit(rhs, "\\+")[[1]])
           if (!term %in% existing) {
-            updateTextInput(session, "custom_formula",
+            updateTextAreaInput(session, "custom_formula",
                             value = paste0(stripped, " + ", term))
           }
         } else {
-          updateTextInput(session, "custom_formula",
+          updateTextAreaInput(session, "custom_formula",
                           value = paste0(stripped, " + ", term))
+        }
+      }
+    })
+
+    # Copy from existing formula dropdown
+    observeEvent(input$copy_from_formula, {
+      if (isTRUE(rv$read_only)) return()
+      f <- input$copy_from_formula
+      if (is.null(f) || nchar(trimws(f)) == 0) return()
+      updateTextAreaInput(session, "custom_formula", value = f)
+    })
+
+    # Populate "copy from" dropdown when formulas change
+    observe({
+      choices <- c("(blank)" = "")
+      if (!is.null(rv$formulas) && length(rv$formulas) > 0) {
+        fc <- rv$formulas
+        names(fc) <- paste0("Formula ", seq_along(fc))
+        choices <- c(choices, fc)
+      }
+      updateSelectInput(session, "copy_from_formula", choices = choices)
+    })
+
+    # Staged term addition: + Main Effects
+    observeEvent(input$add_main_effects, {
+      if (isTRUE(rv$read_only)) return()
+      terms <- available_terms()
+      main <- c(terms$factors, terms$covariates, terms$blocks)
+      if (length(main) == 0) return()
+      current <- trimws(input$custom_formula %||% "")
+      resp <- input$active_response %||% "Y"
+      if (nchar(current) == 0) {
+        updateTextAreaInput(session, "custom_formula",
+                            value = paste0(resp, " ~ ", paste(main, collapse = " + ")))
+      } else {
+        existing <- if (grepl("~", current)) {
+          trimws(strsplit(trimws(sub("^[^~]+~", "", current)), "\\+")[[1]])
+        } else character()
+        new_terms <- setdiff(main, existing)
+        if (length(new_terms) > 0) {
+          sep <- if (grepl("~\\s*$", current)) "" else " + "
+          updateTextAreaInput(session, "custom_formula",
+                              value = paste0(current, sep, paste(new_terms, collapse = " + ")))
+        }
+      }
+    })
+
+    # Staged term addition: + 2-way interactions
+    observeEvent(input$add_2way, {
+      if (isTRUE(rv$read_only)) return()
+      terms <- available_terms()
+      main <- c(terms$factors, terms$covariates, terms$blocks)
+      if (length(main) < 2) return()
+      twoway <- combn(main, 2, paste, collapse = ":")
+      current <- trimws(input$custom_formula %||% "")
+      resp <- input$active_response %||% "Y"
+      if (nchar(current) == 0) {
+        updateTextAreaInput(session, "custom_formula",
+                            value = paste0(resp, " ~ ", paste(twoway, collapse = " + ")))
+      } else {
+        existing <- if (grepl("~", current)) {
+          trimws(strsplit(trimws(sub("^[^~]+~", "", current)), "\\+")[[1]])
+        } else character()
+        new_terms <- setdiff(twoway, existing)
+        if (length(new_terms) > 0) {
+          sep <- if (grepl("~\\s*$", current)) "" else " + "
+          updateTextAreaInput(session, "custom_formula",
+                              value = paste0(current, sep, paste(new_terms, collapse = " + ")))
+        }
+      }
+    })
+
+    # Staged term addition: + 3-way interactions
+    observeEvent(input$add_3way, {
+      if (isTRUE(rv$read_only)) return()
+      terms <- available_terms()
+      main <- c(terms$factors, terms$covariates, terms$blocks)
+      if (length(main) < 3) return()
+      threeway <- combn(main, 3, paste, collapse = ":")
+      current <- trimws(input$custom_formula %||% "")
+      resp <- input$active_response %||% "Y"
+      if (nchar(current) == 0) {
+        updateTextAreaInput(session, "custom_formula",
+                            value = paste0(resp, " ~ ", paste(threeway, collapse = " + ")))
+      } else {
+        existing <- if (grepl("~", current)) {
+          trimws(strsplit(trimws(sub("^[^~]+~", "", current)), "\\+")[[1]])
+        } else character()
+        new_terms <- setdiff(threeway, existing)
+        if (length(new_terms) > 0) {
+          sep <- if (grepl("~\\s*$", current)) "" else " + "
+          updateTextAreaInput(session, "custom_formula",
+                              value = paste0(current, sep, paste(new_terms, collapse = " + ")))
         }
       }
     })
@@ -513,10 +662,14 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
     # Also called by other modules (e.g. data upload) via returned reference
     do_fit_models <- function(formulas_to_run) {
       withProgress(message = "Fitting models...", value = 0, {
+        wt_col <- input$weight_column
+        if (is.null(wt_col) || wt_col == "") wt_col <- NULL
         result <- fit_models(formulas_to_run, rv$data,
                              col_types = rv$col_types,
                              transforms = rv$transforms,
-                             coding_values = rv$coding_values)
+                             coding_values = rv$coding_values,
+                             weight_column = wt_col,
+                             level_labels = rv$level_labels)
         rv$models <- result$models
         rv$model_errors <- result$errors
         rv$model_notes <- check_model_notes(rv$models)
@@ -527,11 +680,16 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
           a <- tryCatch(model_anova(m, type=3), error=function(e) NULL)
           if (!is.null(a)) rownames(a)[rownames(a) != "(Intercept)"] else character(0)
         })))
-        factor_cols  <- factors_()
+        factor_cols  <- c(factors_(), blocks())
+        blk_cols     <- blocks()
         cat_factor_terms <- all_terms_raw[sapply(all_terms_raw, function(t) {
           parts <- strsplit(t, ":")[[1]]
           all(parts %in% factor_cols) &&
-            all(sapply(parts, function(cn) (rv$col_types[[cn]] %||% "Factor") == "Factor"))
+            all(sapply(parts, function(cn) {
+              # Blocks always qualify for MC (they are categorical by nature)
+              if (cn %in% blk_cols) return(TRUE)
+              (rv$col_types[[cn]] %||% "Factor") == "Factor"
+            }))
         })]
         # Sort: highest-order interactions first (treatment A:B before A, B)
         n_parts <- sapply(cat_factor_terms, function(t) length(strsplit(t, ":")[[1]]))
@@ -707,10 +865,17 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
       req(length(rv$models) > 0)
       alpha <- input$prune_alpha %||% 0.05
 
-      # Prune each currently fitted model
+      # Prune only checked/selected models, not all fitted models
+      selected <- get_selected_formulas()
+      models_to_prune <- names(rv$models)[names(rv$models) %in% selected]
+      if (length(models_to_prune) == 0) {
+        showNotification("No models selected. Check the formulas you want to prune.", type = "warning")
+        return()
+      }
+
       pruned <- list()
       dup_notes <- character()
-      for (mname in names(rv$models)) {
+      for (mname in models_to_prune) {
         m <- rv$models[[mname]]
         pruned_m <- tryCatch(
           backward_eliminate(m, alpha = alpha),
@@ -833,7 +998,7 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
         div(class = "alert alert-info p-2 mb-2",
             icon("info-circle"),
             "No categorical factor terms available for multiple comparisons. ",
-            "MC requires factors with Type = Factor (not Numeric). ",
+            "Multiple comparisons require factors with Type = Factor (not Numeric). ",
             "Switch to Comparative mode or change factor types in Assign Roles.")
       } else {
         shinyjs::enable(ns("run_mc_btn"))
@@ -849,6 +1014,17 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
       })
       showNotification("Multiple comparisons complete.", type = "message")
     })
+
+    # Auto-recompute MC when models change (e.g. after outlier removal/refit)
+    observeEvent(rv$models, {
+      if (!isTRUE(input$mc_on)) return()
+      if (length(rv$mc_results) == 0) return()  # Only rerun if MC was previously computed
+      if (length(input$mc_terms) == 0 || length(input$mc_method) == 0) return()
+      tryCatch({
+        run_mc_results()
+        showNotification("MC results updated (models changed).", type = "message", duration = 3)
+      }, error = function(e) NULL)
+    }, ignoreInit = TRUE)
 
     # Dynamic Dunnett control: one dropdown per selected MC term
     output$dunnett_controls_ui <- renderUI({
@@ -885,7 +1061,7 @@ mod_models_server <- function(id, rv, role_selectors, shared_reactives,
     list(
       do_fit_models = do_fit_models,
       set_custom_formula = function(text) {
-        updateTextInput(session, "custom_formula", value = text)
+        updateTextAreaInput(session, "custom_formula", value = text)
       },
       get_custom_formula = reactive({ input$custom_formula }),
       get_active_response = reactive({ input$active_response })

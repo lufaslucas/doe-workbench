@@ -47,6 +47,11 @@ SHELL_GREEN   <- "#00A651"
 SHELL_BROWN   <- "#8C6A32"
 SHELL_LTBLUE  <- "#6CACE4"
 
+# ── P-value Formatting ────────────────────────────────────────────────
+PVALUE_DIGITS      <- 4L       # Default decimal places for p-values
+PVALUE_FLOOR_LABEL <- "<0.0001"  # Display string when p rounds to 0
+PVALUE_FOOTNOTE    <- "P-values shown to 4 decimal places. Values below 0.0001 displayed as <0.0001. Values near the significance threshold are rounded conservatively (away from rejection)."
+
 # ── UI Styling ──────────────────────────────────────────────────────────
 PVALUE_GREEN   <- "#c8f7c5"   # Background for significant p-values
 VIF_AMBER      <- "#fff3cd"   # Background for moderate VIF
@@ -68,6 +73,9 @@ SEL_ALPHA_DIMMED    <- 0.12           # alpha for unselected points
 SEL_ALPHA_NORMAL    <- 0.70           # default alpha (no selection active)
 SEL_ALPHA_SELECTED  <- 1.0            # alpha for selected points
 SEL_SIZE_BOOST      <- 1.3            # size multiplier for selected points
+
+# ── Model Types ──────────────────────────────────────────────────────────
+MODEL_TYPES <- c("OLS (lm)" = "lm")   # Extensible: add "WLS" = "wls", "GLM" = "glm", etc.
 
 # ── Read-Only Mode ──────────────────────────────────────────────────────
 READONLY_HASH_ALGO  <- "sha256"       # digest algorithm for password hashing

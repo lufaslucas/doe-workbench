@@ -528,9 +528,33 @@ mod_data_generate_server <- function(id, rv, analysis_mode, navigate_to,
       if (length(plot_cols) == 0) plot_cols <- all_cols
       n <- length(plot_cols)
 
-      pal <- tryCatch(cat_palette()(n), error = function(e) RColorBrewer::brewer.pal(min(n, 8), "Set2"))
+      pal <- tryCatch(cat_palette()(max(n, 8)), error = function(e) RColorBrewer::brewer.pal(min(n, 8), "Set2"))
 
-      if (n == 1) {
+      # Latin Square detection: has Row, Col, and Treatment columns
+      lc_names <- tolower(names(df))
+      is_latin <- all(c("row", "col", "treatment") %in% lc_names)
+
+      if (is_latin) {
+        # Latin Square: 2D heatmap — Col vs Row, coloured by Treatment
+        row_col <- names(df)[lc_names == "row"]
+        col_col <- names(df)[lc_names == "col"]
+        trt_col <- names(df)[lc_names == "treatment"]
+        df[[row_col]] <- as.factor(df[[row_col]])
+        df[[col_col]] <- as.factor(df[[col_col]])
+        df[[trt_col]] <- as.factor(df[[trt_col]])
+        n_trt <- nlevels(df[[trt_col]])
+        trt_pal <- tryCatch(cat_palette()(n_trt), error = function(e) RColorBrewer::brewer.pal(min(n_trt, 8), "Set2"))
+        trt_map <- setNames(trt_pal[seq_len(n_trt)], levels(df[[trt_col]]))
+        p <- plot_ly(df, x = ~df[[col_col]], y = ~df[[row_col]],
+                     type = "scatter", mode = "markers+text",
+                     color = ~df[[trt_col]], colors = trt_map,
+                     text = ~df[[trt_col]], textposition = "middle right",
+                     marker = list(size = 16)) %>%
+          layout(xaxis = list(title = col_col, type = "category"),
+                 yaxis = list(title = row_col, type = "category",
+                              autorange = "reversed"),
+                 title = "Latin Square Design")
+      } else if (n == 1) {
         # 1 factor: plot vs run order
         p <- plot_ly(df, x = seq_len(nrow(df)), y = ~df[[plot_cols[1]]],
                      type = "scatter", mode = "markers",
@@ -542,41 +566,15 @@ mod_data_generate_server <- function(id, rv, analysis_mode, navigate_to,
                      type = "scatter", mode = "markers",
                      marker = list(color = pal[1], size = 8)) %>%
           layout(xaxis = list(title = plot_cols[1]), yaxis = list(title = plot_cols[2]))
-      } else if (n == 3) {
-        # 3 factors: 3D scatter
-        p <- plot_ly(df, x = ~df[[plot_cols[1]]], y = ~df[[plot_cols[2]]],
-                     z = ~df[[plot_cols[3]]],
-                     type = "scatter3d", mode = "markers",
-                     marker = list(color = pal[1], size = 5)) %>%
-          layout(scene = list(
-            xaxis = list(title = plot_cols[1]),
-            yaxis = list(title = plot_cols[2]),
-            zaxis = list(title = plot_cols[3])))
       } else {
-        # 4+ factors: 3D scatter with 4th as colour
-        col_data <- df[[plot_cols[4]]]
-        if (is.numeric(col_data)) {
-          cs <- cont_plotly_cs()
-          p <- plot_ly(df, x = ~df[[plot_cols[1]]], y = ~df[[plot_cols[2]]],
-                       z = ~df[[plot_cols[3]]], color = ~col_data,
-                       colors = cs,
-                       type = "scatter3d", mode = "markers",
-                       marker = list(size = 5)) %>%
-            layout(scene = list(
-              xaxis = list(title = plot_cols[1]),
-              yaxis = list(title = plot_cols[2]),
-              zaxis = list(title = plot_cols[3])))
-        } else {
-          p <- plot_ly(df, x = ~df[[plot_cols[1]]], y = ~df[[plot_cols[2]]],
-                       z = ~df[[plot_cols[3]]], color = ~as.factor(col_data),
-                       colors = pal,
-                       type = "scatter3d", mode = "markers",
-                       marker = list(size = 5)) %>%
-            layout(scene = list(
-              xaxis = list(title = plot_cols[1]),
-              yaxis = list(title = plot_cols[2]),
-              zaxis = list(title = plot_cols[3])))
-        }
+        # 3+ factors: use shared 3D scatter with jitter + categorical tick labels
+        colour_col <- if (n >= 4) plot_cols[4] else NULL
+        p <- plot_3d_scatter(df, plot_cols[1], plot_cols[2], plot_cols[3],
+                             colour_col = colour_col,
+                             cat_pal = pal,
+                             dcol = pal[1],
+                             cont_cs = tryCatch(cont_plotly_cs(), error = function(e) NULL),
+                             title = "Design Preview")
       }
       p %>% layout(margin = list(t = 30))
     })
@@ -624,6 +622,7 @@ mod_data_generate_server <- function(id, rv, analysis_mode, navigate_to,
       rv$data <- stamp_row_ids(df)
       rv$transforms    <- list()
       rv$coding_values <- list()
+      rv$level_labels  <- list()
 
       # Auto-assign roles based on column names
       lookup <- doe_entry_lookup()
@@ -813,6 +812,14 @@ mod_data_generate_server <- function(id, rv, analysis_mode, navigate_to,
           }
         }
       }
+
+      # Store design metadata for download/reimport
+      rv$design_metadata <- list(
+        design_type   = attr(orig_df, "design_type"),
+        resolution    = attr(orig_df, "design_resolution"),
+        analysis_mode = if (is_regression) "regression" else "comparative",
+        generator     = input$doe_type
+      )
 
       showNotification(
         paste0("Design loaded: ", nrow(df), " runs \u00d7 ", ncol(df),

@@ -1,10 +1,19 @@
-# global.R — Bootstrap for DoEWorkbench Shiny app
-# When installed as a package, R/ files are auto-loaded by the namespace.
-# This file attaches the package + dependency packages that ui.R/server.R
-# reference directly (e.g. useShinyjs(), plotlyOutput(), etc.)
+# global.R — Bootstrap for doe.workbench Shiny app
+# Dev mode: load_all() sources R/ files directly (no install needed).
+# Installed mode: falls back to library(doe.workbench).
+
+# Show full error messages in-app instead of grey disconnect overlay
+options(shiny.sanitize.errors = FALSE)
 
 suppressPackageStartupMessages({
-  library(DoEWorkbench)
+  # Use load_all() in dev (when DESCRIPTION + R/ exist at package root), else installed package
+  pkg_root <- tryCatch(here::here(), error = function(e) NULL)
+  if (!is.null(pkg_root) && file.exists(file.path(pkg_root, "DESCRIPTION")) &&
+      file.exists(file.path(pkg_root, "R"))) {
+    pkgload::load_all(pkg_root, export_all = FALSE, helpers = FALSE, quiet = TRUE)
+  } else {
+    library(doe.workbench)
+  }
   library(shiny)
   library(bslib)
   library(shinyjs)
@@ -22,6 +31,7 @@ suppressPackageStartupMessages({
   library(RColorBrewer)
   library(base64enc)
   library(digest)
+  library(openxlsx)
 })
 
 # Optional: officedown for styled Word reports (falls back to plain Word)

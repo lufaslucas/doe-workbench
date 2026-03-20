@@ -23,11 +23,40 @@ mod_assign_roles_ui <- function(id) {
           "Coding = rescale to \u22121/+1 (specify actual values for each level)."
         ),
         wellPanel(
+          h6("Batch role assignment"),
+          fluidRow(
+            column(3,
+              selectInput(ns("batch_role"), "Set all columns to:",
+                          choices = c("(choose)" = "", "Response" = "Response",
+                                      "Factor" = "Factor", "Covariate" = "Covariate",
+                                      "Block" = "Block", "Ignore" = "Ignore"),
+                          selected = ""),
+              actionButton(ns("apply_batch_role"), "Apply to all",
+                           class = "btn-sm btn-outline-secondary", icon = icon("layer-group"))
+            ),
+            column(3,
+              selectInput(ns("batch_type_role"), "Set all to Ignore by type:",
+                          choices = c("(choose)" = "",
+                                      "All factors \u2192 Ignore" = "factor_ignore",
+                                      "All numeric \u2192 Ignore" = "numeric_ignore"),
+                          selected = ""),
+              actionButton(ns("apply_batch_type"), "Apply",
+                           class = "btn-sm btn-outline-secondary", icon = icon("eraser"))
+            ),
+            column(6,
+              p(class = "text-muted small mt-2",
+                "Use these to reset roles before building up from scratch. ",
+                "Individual column roles can still be changed below.")
+            )
+          )
+        ),
+        wellPanel(
           h6("Bulk transformations"),
           fluidRow(
             column(3,
               selectInput(ns("bulk_factor_transform"), "All numeric factors",
                           choices = c("None" = "none", "Centre" = "centre",
+                                      "Centre & Scale (range/2)" = "centre_scale",
                                       "Coding (\u22121/+1 to min/max)" = "coding",
                                       "Coding (\u22121/+1 custom range)" = "coding_fixed"),
                           selected = "none"),
@@ -38,6 +67,7 @@ mod_assign_roles_ui <- function(id) {
             column(3,
               selectInput(ns("bulk_cov_transform"), "All numeric covariates",
                           choices = c("None" = "none", "Centre" = "centre",
+                                      "Centre & Scale (range/2)" = "centre_scale",
                                       "Coding (\u22121/+1 to min/max)" = "coding",
                                       "Coding (\u22121/+1 custom range)" = "coding_fixed"),
                           selected = "none"),
@@ -51,7 +81,9 @@ mod_assign_roles_ui <- function(id) {
                 tags$br(),
                 tags$b("Coding (custom):"), " same as min/max, then edit per-column \u22121/+1 levels below. ",
                 tags$br(),
-                tags$b("Centre:"), " subtracts column mean.")
+                tags$b("Centre:"), " subtracts column mean. ",
+                tags$br(),
+                tags$b("Centre & Scale:"), " (x \u2212 mean) / (range/2). Coefficients are per half-range unit.")
             )
           )
         ),
@@ -70,7 +102,7 @@ mod_assign_roles_server <- function(id, rv, analysis_mode, reset_downstream) {
     output$role_ui <- renderUI({
       req(rv$data)
       cols       <- setdiff(names(rv$data), ROW_ID_COL)
-      role_ch    <- c("Response", "Factor", "Covariate", "Block", "Run Order", "Ignore")
+      role_ch    <- c("Response", "Factor", "Covariate", "Block", "Run Order", "Weight", "Ignore")
       type_ch    <- c("Numeric", "Factor")
       n_per_row  <- 3
 
@@ -108,9 +140,11 @@ mod_assign_roles_server <- function(id, rv, analysis_mode, reset_downstream) {
                   condition = paste0(
                     "input['", type_id, "'] == 'Numeric' && ",
                     "input['", role_id, "'] != 'Response' && ",
-                    "input['", role_id, "'] != 'Ignore'"),
+                    "input['", role_id, "'] != 'Ignore' && ",
+                    "input['", role_id, "'] != 'Weight'"),
                   selectInput(ns(paste0("transform_", cn)), "Transform",
                               choices = c("None" = "none", "Centre" = "centre",
+                                          "Centre & Scale" = "centre_scale",
                                           "Coding" = "coding"),
                               selected = cur_transform),
                   conditionalPanel(
@@ -126,6 +160,35 @@ mod_assign_roles_server <- function(id, rv, analysis_mode, reset_downstream) {
                       )
                     )
                   )
+                ),
+                # Level labels for Factor-type columns
+                conditionalPanel(
+                  condition = paste0(
+                    "(input['", type_id, "'] == 'Factor' || ",
+                    "input['", role_id, "'] == 'Block') && ",
+                    "input['", role_id, "'] != 'Response' && ",
+                    "input['", role_id, "'] != 'Ignore' && ",
+                    "input['", role_id, "'] != 'Weight'"),
+                  {
+                    ulevs <- as.character(sort(unique(rv$data[[cn]])))
+                    if (length(ulevs) > 0 && length(ulevs) <= 20) {
+                      cur_labels <- rv$level_labels[[cn]] %||% stats::setNames(ulevs, ulevs)
+                      tagList(
+                        tags$details(
+                          tags$summary(
+                            style = "cursor:pointer; font-size:0.85em; color:#6c757d;",
+                            paste0("Level labels (", length(ulevs), ")")
+                          ),
+                          lapply(ulevs, function(lv) {
+                            cur_lbl <- cur_labels[[lv]] %||% lv
+                            textInput(ns(paste0("llbl_", cn, "___", lv)),
+                                      label = lv, value = cur_lbl,
+                                      width = "100%")
+                          })
+                        )
+                      )
+                    }
+                  }
                 )
               )
             )
@@ -140,8 +203,60 @@ mod_assign_roles_server <- function(id, rv, analysis_mode, reset_downstream) {
     observe({
       locked <- isTRUE(rv$read_only)
       toggle <- if (locked) shinyjs::disable else shinyjs::enable
+      toggle(ns("apply_batch_role"))
+      toggle(ns("apply_batch_type"))
       toggle(ns("apply_bulk_factor"))
       toggle(ns("apply_bulk_cov"))
+    })
+
+    # ── Batch role assignment: set all columns to one role ───────────────
+    observeEvent(input$apply_batch_role, {
+      if (is_locked(rv, "Batch role assignment")) return()
+      req(rv$data)
+      new_role <- input$batch_role
+      if (is.null(new_role) || new_role == "") {
+        showNotification("Select a role first.", type = "warning", duration = 3)
+        return()
+      }
+      cols <- setdiff(names(rv$data), ROW_ID_COL)
+      n <- 0
+      for (cn in cols) {
+        rv$roles[[cn]] <- new_role
+        updateSelectInput(session, paste0("role_", cn), selected = new_role)
+        n <- n + 1
+      }
+      reset_downstream()
+      showNotification(
+        paste0("Set all ", n, " columns to '", new_role, "'."),
+        type = "message", duration = 3)
+    })
+
+    # ── Batch ignore by detected type ────────────────────────────────────
+    observeEvent(input$apply_batch_type, {
+      if (is_locked(rv, "Batch role assignment")) return()
+      req(rv$data)
+      action <- input$batch_type_role
+      if (is.null(action) || action == "") {
+        showNotification("Select a type filter first.", type = "warning", duration = 3)
+        return()
+      }
+      cols <- setdiff(names(rv$data), ROW_ID_COL)
+      n <- 0
+      for (cn in cols) {
+        is_num <- is.numeric(rv$data[[cn]])
+        match <- (action == "numeric_ignore" && is_num) ||
+                 (action == "factor_ignore" && !is_num)
+        if (match) {
+          rv$roles[[cn]] <- "Ignore"
+          updateSelectInput(session, paste0("role_", cn), selected = "Ignore")
+          n <- n + 1
+        }
+      }
+      reset_downstream()
+      type_label <- if (action == "factor_ignore") "factor/character" else "numeric"
+      showNotification(
+        paste0("Set ", n, " ", type_label, " column(s) to 'Ignore'."),
+        type = "message", duration = 3)
     })
 
     # ── Sync role/type/transform inputs -> rv ─────────────────────────────
@@ -173,6 +288,25 @@ mod_assign_roles_server <- function(id, rv, analysis_mode, reset_downstream) {
             if (is.null(rv$coding_values[[cn]])) rv$coding_values[[cn]] <- list()
             rv$coding_values[[cn]]$high <- input[[paste0("code_high_", cn)]]
           }, ignoreInit = TRUE)
+          # Level label observers
+          ulevs <- as.character(sort(unique(rv$data[[cn]])))
+          for (lv in ulevs) {
+            local({
+              col_name <- cn
+              level_val <- lv
+              input_id <- paste0("llbl_", col_name, "___", level_val)
+              observeEvent(input[[input_id]], {
+                if (isTRUE(rv$read_only)) return()
+                val <- input[[input_id]]
+                if (is.null(val) || val == "") val <- level_val
+                if (is.null(rv$level_labels[[col_name]])) {
+                  all_levs <- as.character(sort(unique(rv$data[[col_name]])))
+                  rv$level_labels[[col_name]] <- stats::setNames(all_levs, all_levs)
+                }
+                rv$level_labels[[col_name]][[level_val]] <- val
+              }, ignoreInit = TRUE)
+            })
+          }
         })
       }
     })

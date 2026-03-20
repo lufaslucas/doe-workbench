@@ -40,6 +40,16 @@ mod_results_ui <- function(id) {
                 radioButtons(ns("summary_plot_label"), "Model labels:",
                              choices = c("Model number" = "number", "Formula" = "formula"),
                              selected = "number", inline = TRUE)
+              ),
+              column(3,
+                radioButtons(ns("metrics_view_mode"), "View:",
+                             choices = c("Individual panels" = "panels", "Parallel plot" = "parallel"),
+                             selected = "panels", inline = TRUE)
+              ),
+              column(3,
+                radioButtons(ns("metrics_scale_mode"), "Y scale:",
+                             choices = c("Natural" = "natural", "Best at top" = "best"),
+                             selected = "natural", inline = TRUE)
               )
             ),
             h5("Actual vs. Predicted"),
@@ -56,6 +66,14 @@ mod_results_ui <- function(id) {
                 checkboxGroupInput(ns("anova_show"), "Show columns:",
                                    choices = c("p-values" = "p", "VIF" = "vif"),
                                    selected = c("p", "vif"), inline = TRUE),
+                conditionalPanel(
+                  condition = paste0("input['", ns("anova_show"), "'] && input['",
+                                     ns("anova_show"), "'].indexOf('vif') > -1"),
+                  p(class = "text-muted small", style = "margin-top: -8px;",
+                    tags$b("VIF"), " (Variance Inflation Factor) measures collinearity. ",
+                    "VIF = 1: no collinearity. VIF > 5: moderate. VIF > 10: severe. ",
+                    "For multi-df terms (factors with k levels), GVIF^(1/Df) is shown (comparable to standard VIF).")
+                ),
                 checkboxGroupInput(ns("anova_show_extra"), "ANOVA detail:",
                                    choices = c("df" = "df", "SS" = "SS",
                                                "MS" = "MS", "F values" = "F"),
@@ -64,7 +82,8 @@ mod_results_ui <- function(id) {
               column(4,
                 selectInput(ns("anova_sort_order"), "Term ordering",
                             choices = c("By category (structured)" = "category",
-                                        "By significance (p-value)" = "significance"),
+                                        "By significance (p-value)" = "significance",
+                                        "Formula order" = "formula"),
                             selected = "category")
               )
             ),
@@ -74,6 +93,12 @@ mod_results_ui <- function(id) {
                 DT::dataTableOutput(ns("anova_table"))
               ),
               tabPanel("Type I",
+                br(),
+                tags$small(class = "text-muted",
+                  icon("info-circle"),
+                  " Type I uses sequential sums of squares. The order terms enter the model ",
+                  "affects their SS and p-values. Terms entered first absorb more variance."
+                ),
                 br(),
                 DT::dataTableOutput(ns("anova_type1_table"))
               )
@@ -91,7 +116,7 @@ mod_results_ui <- function(id) {
                                    choices = c("p-values" = "p",
                                                "df" = "df", "SS" = "SS",
                                                "MS" = "MS", "F values" = "F"),
-                                   selected = "p", inline = TRUE)
+                                   selected = c("p", "df", "SS", "MS", "F"), inline = TRUE)
               )
             ),
             DT::dataTableOutput(ns("lof_table"))
@@ -123,17 +148,38 @@ mod_results_ui <- function(id) {
             p(class = "text-muted",
               "Factor terms show LS means with 95% CI. Covariates show partial effect with 95% CI. ",
               "Adjusted data points have other model terms removed."),
-            plotlyOutput(ns("effects_plot"), height = "500px"),
+            div(style = "width: 100%;",
+              plotlyOutput(ns("effects_plot"), width = "100%", height = "500px")),
             br(),
             DT::dataTableOutput(ns("effects_table"))
           ),
           tabPanel("Leverage",
             br(),
+            fluidRow(
+              column(8,
+                p(class = "text-muted",
+                  "Y residuals vs term residuals after removing all other terms. ",
+                  "The slope equals the coefficient; the spread shows leverage. ",
+                  "Follows the term and models selected above.")
+              ),
+              column(4,
+                selectInput(ns("leverage_panel_by"), "Panel by",
+                            choices = c("None" = "none"), selected = "none")
+              )
+            ),
+            div(style = "width: 100%;",
+              plotlyOutput(ns("leverage_plot_combined"), width = "100%", height = "450px"))
+          ),
+          tabPanel("Side by Side",
+            br(),
             p(class = "text-muted",
-              "Y residuals vs term residuals after removing all other terms. ",
-              "The slope equals the coefficient; the spread shows leverage. ",
-              "Follows the term and models selected above."),
-            plotlyOutput(ns("leverage_plot_combined"), height = "450px")
+              "Partial effects (left) and leverage plot (right) for the selected term."),
+            fluidRow(
+              column(6, plotlyOutput(ns("effects_plot_sbs"), height = "450px")),
+              column(6, plotlyOutput(ns("leverage_plot_sbs"), height = "450px"))
+            ),
+            br(),
+            DT::dataTableOutput(ns("effects_table_sbs"))
           )
         )
       ),
@@ -145,7 +191,8 @@ mod_results_ui <- function(id) {
           column(3, selectInput(ns("contour_x"), "X-axis factor", choices = NULL)),
           column(3, selectInput(ns("contour_y"), "Y-axis factor", choices = NULL)),
           column(3, radioButtons(ns("contour_type"), "Plot type",
-                                 choices = c("Contour" = "contour", "Surface" = "surface"),
+                                 choices = c("Contour" = "contour", "Surface" = "surface",
+                                             "Side by side" = "both"),
                                  selected = "contour", inline = TRUE)),
           column(3, sliderInput(ns("contour_grid_n"), "Grid resolution", min = 15, max = 60,
                                 value = 30, step = 5))
@@ -165,13 +212,20 @@ mod_results_ui <- function(id) {
           "factor is varied while holding all other factors at their current values. ",
           "Active models are shown as stacked rows with aligned variable panels."),
         fluidRow(
-          column(4, checkboxInput(ns("profiler_ci"), "Show 95% confidence interval",
-                                  value = TRUE)),
-          column(4, checkboxInput(ns("profiler_pi"), "Show 95% prediction interval",
-                                  value = FALSE))
+          column(2, checkboxInput(ns("profiler_ci"), "Show 95% CI", value = TRUE)),
+          column(2, checkboxInput(ns("profiler_pi"), "Show 95% PI", value = FALSE)),
+          column(2, radioButtons(ns("profiler_mode"), "Layout",
+                                 choices = c("Aligned" = "aligned", "Collapsed" = "collapsed"),
+                                 selected = "aligned", inline = TRUE)),
+          column(2, sliderInput(ns("profiler_term_width"), "Panel width (px)",
+                                min = 150, max = 400, value = 250, step = 25)),
+          column(4, radioButtons(ns("profiler_y_scale"), "Y-axis scale",
+                                 choices = c("Per panel" = "free", "Shared" = "shared",
+                                             "Full response range" = "full"),
+                                 selected = "free", inline = TRUE))
         ),
         uiOutput(ns("profiler_controls_ui")),
-        div(style = "width: 100%;", uiOutput(ns("profiler_plots_ui")))
+        div(style = "overflow-x: auto; width: 100%;", uiOutput(ns("profiler_plots_ui")))
       ),
 
       # ── Multiple Comparisons ──────────────────────────────────────────────
@@ -187,6 +241,7 @@ mod_results_ui <- function(id) {
         ),
         uiOutput(ns("mc_plot_container")),
         br(),
+        uiOutput(ns("mc_critical_values")),
         DT::dataTableOutput(ns("mc_table"))
       ),
 
@@ -398,10 +453,6 @@ mod_results_ui <- function(id) {
               "is independent of the fitted value."),
             plotlyOutput(ns("resid_standard"), width = "100%", height = "700px")
           ),
-          tabPanel("vs Run Order",
-            br(),
-            uiOutput(ns("resid_vs_runorder_ui"))
-          ),
           tabPanel("vs Model Terms",
             br(),
             p(class = "text-muted",
@@ -420,7 +471,19 @@ mod_results_ui <- function(id) {
             br(),
             p(class = "text-muted",
               "Points flagged by studentised residuals (|rstudent| > 2) or Cook's distance (> 4/n). ",
-              "Select observations to exclude, then refit the model without them."),
+              "In screening and optimisation DoEs, influential points are common and expected ",
+              "\u2014 they often represent the design points that drive the model. ",
+              "Focus on outliers (large residuals) rather than influence alone."),
+            fluidRow(
+              column(6, radioButtons(ns("outlier_resid_type"), "Studentised residual type",
+                                     choices = c("External (rstudent)" = "ext",
+                                                 "Internal (rstandard)" = "int"),
+                                     selected = "ext", inline = TRUE)),
+              column(6, tags$small(class = "text-muted",
+                "External = leave-one-out (more conservative); Internal = standard"))
+            ),
+            plotlyOutput(ns("outlier_influence_plot"), height = "380px"),
+            hr(),
             fluidRow(
               column(8, DT::dataTableOutput(ns("outlier_table"))),
               column(4,
@@ -432,7 +495,21 @@ mod_results_ui <- function(id) {
                   actionButton(ns("refit_no_outliers"), "Refit Model",
                                class = "btn-warning", icon = icon("filter")),
                   br(), br(),
-                  uiOutput(ns("excluded_info_ui"))
+                  uiOutput(ns("excluded_info_ui")),
+                  hr(),
+                  h5("Iterative outlier removal"),
+                  p(class = "text-muted small",
+                    "Automatically remove the worst outlier and refit, repeating until ",
+                    "no points exceed the threshold. Creates intermediate models."),
+                  fluidRow(
+                    column(6, numericInput(ns("iter_outlier_thresh"), "Threshold",
+                                           value = 3, min = 2, max = 5, step = 0.5)),
+                    column(6, radioButtons(ns("iter_outlier_type"), NULL,
+                                            choices = c("External" = "ext", "Internal" = "int"),
+                                            selected = "ext", inline = TRUE))
+                  ),
+                  actionButton(ns("iter_remove_outliers"), "Run Iterative Removal",
+                               class = "btn-outline-warning btn-sm", icon = icon("repeat"))
                 )
               )
             )
@@ -445,7 +522,13 @@ mod_results_ui <- function(id) {
               tags$span(style = "color: #28a745;", "green"), " = OK, ",
               tags$span(style = "color: #ffc107;", "amber"), " = caution, ",
               tags$span(style = "color: #dc3545;", "red"), " = violation detected."),
-            uiOutput(ns("diagnostics_ui"))
+            uiOutput(ns("diagnostics_ui")),
+            hr(),
+            h5("Residual Pattern Analysis"),
+            p(class = "text-muted small",
+              "Checks for systematic patterns in residuals that may indicate ",
+              "missing model terms, unequal variance, or other model misspecification."),
+            uiOutput(ns("resid_pattern_ui"))
           )
         )
       )
@@ -490,6 +573,7 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
     run_orders     <- role_selectors$run_orders
     all_covariates <- role_selectors$all_covariates
     treatment_label <- shared_reactives$treatment_label
+    analysis_mode   <- shared_reactives$analysis_mode
 
     # ── Read-only guard for refit button ──────────────────────────────────
     observe({
@@ -613,6 +697,27 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
       }
     })
 
+    # ── Show/hide Contour/Surface tab: needs >= 2 numeric predictors ────
+    observe({
+      mode <- analysis_mode()
+      mods <- active_models()
+      if (length(mods) == 0 || mode == "comparative") {
+        hideTab("results_tabs", target = "Contour / Surface")
+        return()
+      }
+      # Check if any active model has >= 2 numeric predictors
+      has_enough <- any(sapply(mods, function(m) {
+        preds <- all.vars(formula(m))[-1]
+        numeric_preds <- preds[sapply(preds, function(p) {
+          d <- model.frame(m)
+          p %in% names(d) && is.numeric(d[[p]])
+        })]
+        length(numeric_preds) >= 2
+      }))
+      if (has_enough) showTab("results_tabs", target = "Contour / Surface")
+      else hideTab("results_tabs", target = "Contour / Surface")
+    })
+
     # ── Model errors panel ───────────────────────────────────────────────
     output$model_errors_ui <- renderUI({
       errs <- rv$model_errors
@@ -708,8 +813,8 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
         }
       }
 
-      # Interleave columns per model
-      model_names <- names(active_models())
+      # Interleave columns per model (use testable, not active_models, to match wide)
+      model_names <- names(testable)
       ordered_cols <- "term"
       for (mn in model_names) {
         if ("df" %in% show)  ordered_cols <- c(ordered_cols, paste0(mn, "_df"))
@@ -735,33 +840,8 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
       df_cols <- grep("_df$|^df$", names(wide), value = TRUE)
 
       # Hierarchical header for multi-model view
+      # Built AFTER format_pvalue_dt so we know the final column count
       container_arg <- NULL
-      if (length(model_names) > 1) {
-        stat_labels <- character(0)
-        if ("df" %in% show)  stat_labels <- c(stat_labels, "df")
-        if ("SS" %in% show)  stat_labels <- c(stat_labels, "SS")
-        if ("MS" %in% show)  stat_labels <- c(stat_labels, "MS")
-        if ("F" %in% show)   stat_labels <- c(stat_labels, "F")
-        if ("p" %in% show)   stat_labels <- c(stat_labels, "p")
-        if ("vif" %in% show) stat_labels <- c(stat_labels, "VIF")
-        n_stats <- length(stat_labels)
-        if (n_stats > 0) {
-          sub_cells <- unlist(lapply(model_names, function(mn) {
-            lapply(stat_labels, function(s) tags$th(s))
-          }), recursive = FALSE)
-          container_arg <- htmltools::withTags(table(
-            class = "display",
-            thead(
-              tr(
-                th(rowspan = 2, "Term"),
-                th(rowspan = 2, "Summary"),
-                lapply(model_names, function(mn) th(colspan = n_stats, style = "text-align:center;", mn))
-              ),
-              do.call(tr, sub_cells)
-            )
-          ))
-        }
-      }
 
       # Per-term max VIF for collinearity highlighting
       max_vif <- rep(NA_real_, nrow(wide))
@@ -806,7 +886,7 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
           }
         }
         vif_val <- max_vif[i]
-        if (!is.na(vif_val) && vif_val > sqrt(5)) {
+        if (!is.na(vif_val) && vif_val > 5) {
           parts <- c(parts, paste0("Collinear (VIF=", round(vif_val, 1), ")"))
         }
         paste(parts, collapse = "; ")
@@ -821,24 +901,67 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
       ss_cols <- grep("_SS$|^SS$", names(wide_display), value = TRUE)
       ms_cols <- grep("_MS$|^MS$", names(wide_display), value = TRUE)
 
+      # Pre-format p-value columns (creates ._p_ shadow columns for styling)
+      wide_display <- format_pvalue_dt(wide_display, p_cols, alpha = alpha)
+      shadow_p_cols <- paste0("._p_", p_cols)
+
       vif_max_idx <- which(names(wide_display) == ".vif_max") - 1
-      hide_cols <- list(list(visible = FALSE, targets = vif_max_idx))
+      shadow_p_idx <- which(names(wide_display) %in% shadow_p_cols) - 1
+      hide_cols <- list(list(visible = FALSE, targets = c(vif_max_idx, shadow_p_idx)))
+
+      # Build hierarchical header for multi-model (after shadow columns are added)
+      if (length(model_names) > 1) {
+        show <- c(input$anova_show %||% "p", input$anova_show_extra %||% character(0))
+        stat_labels <- character(0)
+        if ("df" %in% show)  stat_labels <- c(stat_labels, "df")
+        if ("SS" %in% show)  stat_labels <- c(stat_labels, "SS")
+        if ("MS" %in% show)  stat_labels <- c(stat_labels, "MS")
+        if ("F" %in% show)   stat_labels <- c(stat_labels, "F")
+        if ("p" %in% show)   stat_labels <- c(stat_labels, "p")
+        if ("vif" %in% show) stat_labels <- c(stat_labels, "VIF")
+        n_stats <- length(stat_labels)
+
+        # Count hidden trailing columns (.vif_max + shadow p-values)
+        n_hidden <- length(vif_max_idx) + length(shadow_p_idx)
+
+        if (n_stats > 0) {
+          sub_cells <- unlist(lapply(model_names, function(mn) {
+            lapply(stat_labels, function(s) tags$th(s))
+          }), recursive = FALSE)
+          # Add blank sub-header cells for hidden columns
+          hidden_cells <- lapply(seq_len(n_hidden), function(i) tags$th(style = "display:none;", ""))
+
+          container_arg <- htmltools::withTags(table(
+            class = "display",
+            thead(
+              tr(
+                th(rowspan = 2, "Term"),
+                th(rowspan = 2, "Summary"),
+                lapply(model_names, function(mn) th(colspan = n_stats, style = "text-align:center;", mn)),
+                lapply(seq_len(n_hidden), function(i) th(rowspan = 2, style = "display:none;", ""))
+              ),
+              do.call(tr, sub_cells)
+            )
+          ))
+        }
+      }
 
       dt <- dt_table(wide_display, rownames = FALSE,
                       options = list(pageLength = 20, columnDefs = hide_cols),
                       container = container_arg, filter = "none")
       for (pc in p_cols) {
+        shadow <- paste0("._p_", pc)
         dt <- DT::formatStyle(dt, pc,
-                 backgroundColor = DT::styleInterval(alpha, c("#c8f7c5", "white")),
-                 fontWeight      = DT::styleInterval(alpha, c("bold", "normal")))
-        dt <- DT::formatRound(dt, pc, digits = 4)
+                 backgroundColor = DT::styleInterval(alpha, c(PVALUE_GREEN, "white")),
+                 fontWeight      = DT::styleInterval(alpha, c("bold", "normal")),
+                 valueColumns    = shadow)
       }
       if (length(f_cols) > 0)  dt <- DT::formatRound(dt, f_cols, digits = 3)
       if (length(ss_cols) > 0) dt <- DT::formatRound(dt, ss_cols, digits = 3)
       if (length(ms_cols) > 0) dt <- DT::formatRound(dt, ms_cols, digits = 3)
       dt <- DT::formatStyle(dt, "term",
-               color = DT::styleInterval(sqrt(5), c("inherit", "#dc3545")),
-               fontWeight = DT::styleInterval(sqrt(5), c("normal", "bold")),
+               color = DT::styleInterval(5, c("inherit", "#dc3545")),
+               fontWeight = DT::styleInterval(5, c("normal", "bold")),
                valueColumns = ".vif_max")
       for (vc in vif_cols) {
         col_name <- if (length(model_names) == 1) "VIF" else vc
@@ -846,9 +969,9 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
           dt <- DT::formatRound(dt, col_name, digits = 2)
           dt <- DT::formatStyle(dt, col_name,
                    backgroundColor = DT::styleInterval(
-                     c(sqrt(5), sqrt(10)),
+                     c(5, 10),
                      c("white", "#fff3cd", "#f8d7da")),
-                   fontWeight = DT::styleInterval(c(sqrt(5)), c("normal", "bold")))
+                   fontWeight = DT::styleInterval(c(5), c("normal", "bold")))
         }
       }
       dt
@@ -888,17 +1011,25 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
       all_dfs <- Filter(Negate(is.null), all_dfs)
       if (length(all_dfs) == 0) return(DT::datatable(data.frame(Message = "No ANOVA results.")))
 
-      term_order <- unique(unlist(lapply(
-        all_dfs[order(-sapply(all_dfs, nrow))],
-        function(d) d$term
-      )))
-      term_order <- c(setdiff(term_order, "Residuals"), "Residuals")
-
+      # Merge all model ANOVA tables
       wide <- all_dfs[[1]]
       if (length(all_dfs) > 1) {
         for (i in 2:length(all_dfs)) wide <- merge(wide, all_dfs[[i]], by = "term", all = TRUE)
       }
-      wide <- wide[match(term_order, wide$term, nomatch = 0L), , drop = FALSE]
+
+      # Apply sort order (shared with Type III)
+      sort_mode <- input$anova_sort_order %||% "category"
+      if (sort_mode == "formula") {
+        # Formula order: preserve sequential order from the longest model
+        term_order <- unique(unlist(lapply(
+          all_dfs[order(-sapply(all_dfs, nrow))],
+          function(d) d$term
+        )))
+        term_order <- c(setdiff(term_order, "Residuals"), "Residuals")
+        wide <- wide[match(term_order, wide$term, nomatch = 0L), , drop = FALSE]
+      } else {
+        wide <- order_anova_terms(wide, term_roles(), sort_mode = sort_mode)
+      }
 
       ordered_cols <- "term"
       for (mn in model_names) {
@@ -947,14 +1078,21 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
       ss_cols <- grep("_SS$|^SS$", names(wide), value = TRUE)
       ms_cols <- grep("_MS$|^MS$", names(wide), value = TRUE)
 
+      # Pre-format p-value columns
+      wide <- format_pvalue_dt(wide, p_cols)
+      shadow_p_cols <- paste0("._p_", p_cols)
+      shadow_p_idx <- which(names(wide) %in% shadow_p_cols) - 1
+      hide_defs <- if (length(shadow_p_idx) > 0) list(list(visible = FALSE, targets = shadow_p_idx)) else list()
+
       dt <- dt_table(wide, rownames = FALSE,
-                      options = list(pageLength = 20),
+                      options = list(pageLength = 20, columnDefs = hide_defs),
                       container = container_arg, filter = "none")
       for (pc in p_cols) {
+        shadow <- paste0("._p_", pc)
         dt <- DT::formatStyle(dt, pc,
-                 backgroundColor = DT::styleInterval(0.05, c("#c8f7c5", "white")),
-                 fontWeight      = DT::styleInterval(0.05, c("bold", "normal")))
-        dt <- DT::formatRound(dt, pc, digits = 4)
+                 backgroundColor = DT::styleInterval(ALPHA_DEFAULT, c(PVALUE_GREEN, "white")),
+                 fontWeight      = DT::styleInterval(ALPHA_DEFAULT, c("bold", "normal")),
+                 valueColumns    = shadow)
       }
       if (length(f_cols) > 0)  dt <- DT::formatRound(dt, f_cols, digits = 3)
       if (length(ss_cols) > 0) dt <- DT::formatRound(dt, ss_cols, digits = 3)
@@ -969,49 +1107,110 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
       if (nrow(smry) == 0) return(plotly_empty())
 
       use_formula <- identical(input$summary_plot_label, "formula")
+      view_mode <- input$metrics_view_mode %||% "panels"
+      scale_mode <- input$metrics_scale_mode %||% "natural"
       n_mod <- nrow(smry)
       smry$Model_Num <- model_m_labels(smry$Model)
-      x_labels <- if (use_formula) smry$Model else smry$Model_Num
-      pal <- cat_palette()(6)
+      model_labels <- if (use_formula) smry$Model else smry$Model_Num
+      pal <- cat_palette()(max(6, n_mod))
 
-      build_panel <- function(metrics, values_list, title, y_range = NULL, show_legend = FALSE) {
+      if (view_mode == "parallel") {
+        # Parallel plot: one x-axis level per metric, one line per model
+        metric_names <- c("R\u00b2", "Adj R\u00b2", "PRESS R\u00b2", "RMSE", "PRESS RMSE", "AIC", "BIC")
+        # higher_better: TRUE = higher is better (R2), FALSE = lower is better (RMSE, AIC, BIC)
+        higher_better <- c(TRUE, TRUE, TRUE, FALSE, FALSE, FALSE, FALSE)
+
         p <- plot_ly()
-        for (i in seq_along(metrics)) {
-          p <- add_trace(p, x = x_labels, y = values_list[[i]], type = "scatter",
-                         mode = "lines+markers", name = metrics[i],
+        for (i in seq_len(n_mod)) {
+          raw_vals <- c(smry$R2[i], smry$Adj_R2[i], smry$PRESS_R2[i],
+                        smry$RMSE[i], smry$PRESS_RMSE[i], smry$AIC[i], smry$BIC[i])
+
+          if (scale_mode == "best") {
+            # Normalize to [0,1] where 1 = best across models for that metric
+            norm_vals <- numeric(length(raw_vals))
+            all_vals_list <- list(smry$R2, smry$Adj_R2, smry$PRESS_R2,
+                                  smry$RMSE, smry$PRESS_RMSE, smry$AIC, smry$BIC)
+            for (j in seq_along(raw_vals)) {
+              vals <- all_vals_list[[j]]
+              rng <- range(vals, na.rm = TRUE)
+              if (diff(rng) < 1e-10) { norm_vals[j] <- 1
+              } else if (higher_better[j]) {
+                norm_vals[j] <- (raw_vals[j] - rng[1]) / diff(rng)
+              } else {
+                norm_vals[j] <- 1 - (raw_vals[j] - rng[1]) / diff(rng)
+              }
+            }
+            y_vals <- norm_vals
+            hover_text <- paste0(metric_names, ": ", round(raw_vals, 4),
+                                  " (score: ", round(norm_vals, 3), ")")
+          } else {
+            y_vals <- raw_vals
+            hover_text <- paste0(metric_names, ": ", round(raw_vals, 4))
+          }
+
+          p <- add_trace(p, x = metric_names, y = y_vals, type = "scatter",
+                         mode = "lines+markers", name = model_labels[i],
                          marker = list(size = 8), line = list(width = 2),
-                         legendgroup = metrics[i], showlegend = show_legend,
-                         hovertemplate = paste0("%{x}<br>", metrics[i],
-                                               ": %{y:.4f}<extra></extra>"),
+                         text = hover_text, hoverinfo = "text",
                          color = I(pal[i]))
         }
-        yaxis <- list(title = title)
-        if (!is.null(y_range)) yaxis$range <- y_range
-        p %>% layout(yaxis = yaxis, xaxis = list(title = ""))
+
+        y_title <- if (scale_mode == "best") "Score (1 = best)" else "Value"
+        y_range <- if (scale_mode == "best") list(range = c(-0.05, 1.05)) else list()
+        plot_h <- if (use_formula) max(400, 300 + n_mod * 12) else 350
+        p %>% layout(
+          yaxis = c(list(title = y_title), y_range),
+          xaxis = list(title = "", categoryorder = "array", categoryarray = metric_names),
+          legend = list(orientation = "h", y = 1.15, x = 0.5, xanchor = "center"),
+          margin = list(t = 50), height = plot_h
+        )
+      } else {
+        # Individual panels mode (original)
+        x_labels <- model_labels
+        pal6 <- cat_palette()(6)
+        best_top <- (scale_mode == "best")
+
+        build_panel <- function(metrics, values_list, title, y_range = NULL,
+                                reverse = FALSE, show_legend = FALSE) {
+          p <- plot_ly()
+          for (i in seq_along(metrics)) {
+            p <- add_trace(p, x = x_labels, y = values_list[[i]], type = "scatter",
+                           mode = "lines+markers", name = metrics[i],
+                           marker = list(size = 8), line = list(width = 2),
+                           legendgroup = metrics[i], showlegend = show_legend,
+                           hovertemplate = paste0("%{x}<br>", metrics[i],
+                                                 ": %{y:.4f}<extra></extra>"),
+                           color = I(pal6[i]))
+          }
+          yaxis <- list(title = title)
+          if (!is.null(y_range)) yaxis$range <- y_range
+          if (reverse && best_top) yaxis$autorange <- "reversed"
+          p %>% layout(yaxis = yaxis, xaxis = list(title = ""))
+        }
+
+        rmse_max <- max(c(smry$RMSE, smry$PRESS_RMSE), na.rm = TRUE) * 1.1
+        p1 <- build_panel(c("RMSE", "PRESS RMSE"),
+                           list(smry$RMSE, smry$PRESS_RMSE),
+                           "RMSE", y_range = c(0, rmse_max), reverse = TRUE, show_legend = TRUE)
+        p2 <- build_panel(c("R\u00b2", "Adj R\u00b2", "PRESS R\u00b2"),
+                           list(smry$R2, smry$Adj_R2, smry$PRESS_R2),
+                           "R\u00b2", y_range = c(0, 1), show_legend = TRUE)
+        p2 <- p2 %>% add_trace(y = rep(1, length(x_labels)), x = x_labels,
+                                 type = "scatter", mode = "lines",
+                                 line = list(dash = "dash", color = "grey70", width = 1),
+                                 showlegend = FALSE, hoverinfo = "skip")
+        p3 <- build_panel(c("AIC"), list(smry$AIC), "AIC", reverse = TRUE, show_legend = TRUE)
+        p4 <- build_panel(c("BIC"), list(smry$BIC), "BIC", reverse = TRUE, show_legend = TRUE)
+
+        plot_h <- if (use_formula) max(350, 250 + n_mod * 12) else 300
+        x_order <- list(categoryorder = "array", categoryarray = x_labels,
+                         tickangle = if (use_formula) -45 else 0)
+        subplot(p1, p2, p3, p4, nrows = 1, shareX = TRUE, titleY = TRUE) %>%
+          layout(legend = list(orientation = "h", y = 1.15, x = 0.5, xanchor = "center", yanchor = "bottom"),
+                 margin = list(t = 50),
+                 height = plot_h,
+                 xaxis  = x_order, xaxis2 = x_order, xaxis3 = x_order, xaxis4 = x_order)
       }
-
-      rmse_max <- max(c(smry$RMSE, smry$PRESS_RMSE), na.rm = TRUE) * 1.1
-      p1 <- build_panel(c("RMSE", "PRESS RMSE"),
-                         list(smry$RMSE, smry$PRESS_RMSE),
-                         "RMSE", y_range = c(0, rmse_max), show_legend = TRUE)
-      p2 <- build_panel(c("R\u00b2", "Adj R\u00b2"),
-                         list(smry$R2, smry$Adj_R2),
-                         "R\u00b2", y_range = c(0, 1), show_legend = TRUE)
-      p2 <- p2 %>% add_trace(y = rep(1, length(x_labels)), x = x_labels,
-                               type = "scatter", mode = "lines",
-                               line = list(dash = "dash", color = "grey70", width = 1),
-                               showlegend = FALSE, hoverinfo = "skip")
-      p3 <- build_panel(c("AIC"), list(smry$AIC), "AIC", show_legend = TRUE)
-      p4 <- build_panel(c("BIC"), list(smry$BIC), "BIC", show_legend = TRUE)
-
-      plot_h <- if (use_formula) max(350, 250 + n_mod * 12) else 300
-      x_order <- list(categoryorder = "array", categoryarray = x_labels,
-                       tickangle = if (use_formula) -45 else 0)
-      subplot(p1, p2, p3, p4, nrows = 1, shareX = TRUE, titleY = TRUE) %>%
-        layout(legend = list(orientation = "h", y = 1.15, x = 0.5, xanchor = "center", yanchor = "bottom"),
-               margin = list(t = 50),
-               height = plot_h,
-               xaxis  = x_order, xaxis2 = x_order, xaxis3 = x_order, xaxis4 = x_order)
     })
 
     # ── Actual vs. Predicted (faceted) ───────────────────────────────────
@@ -1065,7 +1264,7 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
       smry <- cbind(data.frame(`#` = model_m_labels(smry$Model), check.names = FALSE), smry)
       dt_table(smry, rownames=FALSE,
                options=list(pageLength=20), dom="Bt") |>
-        DT::formatRound(c("RMSE","R2","Adj_R2"), digits=4) |>
+        DT::formatRound(c("RMSE","R2","Adj_R2","PRESS_R2"), digits=4) |>
         DT::formatRound(c("AIC","BIC"), digits=2) |>
         DT::formatRound("PRESS_RMSE", digits=4)
     })
@@ -1221,14 +1420,21 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
       ss_cols <- grep("_SS$|^SS$", names(wide), value = TRUE)
       ms_cols <- grep("_MS$|^MS$", names(wide), value = TRUE)
 
+      # Pre-format p-value columns
+      wide <- format_pvalue_dt(wide, p_cols)
+      shadow_p_cols <- paste0("._p_", p_cols)
+      shadow_p_idx <- which(names(wide) %in% shadow_p_cols) - 1
+      hide_defs <- if (length(shadow_p_idx) > 0) list(list(visible = FALSE, targets = shadow_p_idx)) else list()
+
       dt <- dt_table(wide, rownames = FALSE,
-                      options = list(pageLength = 10, dom = "t"),
+                      options = list(pageLength = 10, dom = "t", columnDefs = hide_defs),
                       container = container_arg, filter = "none")
       for (pc in p_cols) {
-        dt <- DT::formatRound(dt, pc, digits = 4)
+        shadow <- paste0("._p_", pc)
         dt <- DT::formatStyle(dt, pc,
-                 backgroundColor = DT::styleInterval(0.05, c("#c8f7c5", "white")),
-                 fontWeight      = DT::styleInterval(0.05, c("bold", "normal")))
+                 backgroundColor = DT::styleInterval(ALPHA_DEFAULT, c(PVALUE_GREEN, "white")),
+                 fontWeight      = DT::styleInterval(ALPHA_DEFAULT, c("bold", "normal")),
+                 valueColumns    = shadow)
       }
       if (length(f_cols) > 0)  dt <- DT::formatRound(dt, f_cols, digits = 3)
       if (length(ss_cols) > 0) dt <- DT::formatRound(dt, ss_cols, digits = 3)
@@ -1240,7 +1446,24 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
     output$coef_interpretation_ui <- renderUI({
       req(length(active_models()) > 0, rv$data)
       parts <- list()
-      parts <- c(parts, list(tags$b("Intercept"), " = grand mean (effects coding). "))
+      # Dynamic intercept explanation
+      intercept_desc <- "grand mean (effects coding)"
+      all_numeric <- c(all_covariates(), factors_()[vapply(factors_(), function(cn)
+        (rv$col_types[[cn]] %||% "Factor") == "Numeric", logical(1))])
+      at_parts <- character()
+      for (cn in all_numeric) {
+        tr <- rv$transforms[[cn]] %||% "none"
+        if (tr == "centre" || tr == "centre_scale") {
+          at_parts <- c(at_parts, paste0(cn, " at mean"))
+        } else if (tr == "coding") {
+          at_parts <- c(at_parts, paste0(cn, " at midpoint"))
+        } else {
+          at_parts <- c(at_parts, paste0(cn, " at 0"))
+        }
+      }
+      if (length(at_parts) > 0)
+        intercept_desc <- paste0(intercept_desc, "; with ", paste(at_parts, collapse = ", "))
+      parts <- c(parts, list(tags$b("Intercept"), paste0(" = ", intercept_desc, ". ")))
       facs <- factors_()
       if (length(facs) > 0) {
         parts <- c(parts, list(
@@ -1255,11 +1478,13 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
       all_numeric <- c(covs, num_factors)
       if (length(all_numeric) > 0) {
         centred  <- character()
+        centred_scaled <- character()
         coded    <- character()
         raw      <- character()
         for (cn in all_numeric) {
           tr <- rv$transforms[[cn]] %||% "none"
           if (tr == "centre") centred <- c(centred, cn)
+          else if (tr == "centre_scale") centred_scaled <- c(centred_scaled, cn)
           else if (tr == "coding") coded <- c(coded, cn)
           else raw <- c(raw, cn)
         }
@@ -1275,6 +1500,13 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
             tags$b("Centred:"), " ",
             paste(centred, collapse = ", "),
             " \u2014 coefficient = change per unit; intercept at mean. "
+          ))
+        }
+        if (length(centred_scaled) > 0) {
+          parts <- c(parts, list(
+            tags$b("Centred & Scaled (range/2):"), " ",
+            paste(centred_scaled, collapse = ", "),
+            " \u2014 coefficient = change per half-range unit; intercept at mean. "
           ))
         }
         if (length(raw) > 0) {
@@ -1379,28 +1611,32 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
       col_order <- setdiff(names(cf), c("Confounding", ".is_aliased"))
       cf <- cf[, c(col_order, "Confounding", ".is_aliased"), drop = FALSE]
       aliased_col_idx <- which(names(cf) == ".is_aliased") - 1
-      num_cols <- c("Estimate", "Std.Error", "t.value", "p.value")
+      # Pre-format p-value column
+      cf <- format_pvalue_dt(cf, "p.value")
+      shadow_p_idx <- which(names(cf) == "._p_p.value") - 1
+      non_p_num_cols <- c("Estimate", "Std.Error", "t.value")
       dt <- dt_table(cf, rownames = FALSE,
                       options = list(
                         pageLength = 30,
                         columnDefs = list(
-                          list(visible = FALSE, targets = aliased_col_idx)
+                          list(visible = FALSE, targets = c(aliased_col_idx, shadow_p_idx))
                         )
                       ))
-      dt <- DT::formatRound(dt, num_cols, digits = 4)
+      dt <- DT::formatRound(dt, non_p_num_cols, digits = 4)
       if ("VIF" %in% names(cf)) {
         dt <- DT::formatRound(dt, "VIF", digits = 2)
         dt <- DT::formatStyle(dt, "VIF",
                  backgroundColor = DT::styleInterval(
-                   c(sqrt(5), sqrt(10)),
-                   c("white", "#fff3cd", "#f8d7da")),
-                 fontWeight = DT::styleInterval(c(sqrt(5)), c("normal", "bold")))
+                   c(5, 10),
+                   c("white", VIF_AMBER, VIF_RED)),
+                 fontWeight = DT::styleInterval(c(5), c("normal", "bold")))
       }
       dt <- DT::formatStyle(dt, "p.value",
-               backgroundColor = DT::styleInterval(0.05, c("#c8f7c5", "white")))
+               backgroundColor = DT::styleInterval(ALPHA_DEFAULT, c(PVALUE_GREEN, "white")),
+               valueColumns = "._p_p.value")
       dt <- DT::formatStyle(dt, ".is_aliased",
                target = "row",
-               backgroundColor = DT::styleEqual(TRUE, "#fff8e1"))
+               backgroundColor = DT::styleEqual(TRUE, ALIASED_BG))
       dt
     })
 
@@ -1587,6 +1823,11 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
             p <- p + geom_point(data=pr_df, aes(x=x, y=adjusted_y, colour=model),
                                 alpha=0.4, size=1.5, inherit.aes=FALSE)
         }
+        n_models <- length(unique(eff_df$model))
+        if (input$effects_view == "Faceted" && n_models > 1) {
+          p <- p + facet_wrap(~model) +
+            guides(colour = "none", fill = "none")
+        }
         p <- p + cat_scale_colour()(name = "Model") +
           cat_scale_fill()(name = "Model") +
           labs(title=paste("Partial effect of", cov, "on", resp_name),
@@ -1648,6 +1889,7 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
       am <- active_models()
       req(length(am) > 0, input$effects_term)
       term <- input$effects_term
+      panel_by <- input$leverage_panel_by %||% "none"
       all_dd <- list()
       for (mn in names(am)) {
         m <- am[[mn]]
@@ -1659,6 +1901,22 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
           dd$Model <- mn
           fit <- tryCatch(lm(y_residual ~ x_residual, data = dd), error = function(e) NULL)
           if (!is.null(fit)) dd$fitted_line <- fitted(fit) else dd$fitted_line <- NA_real_
+          # Attach panel-by variable from model frame
+          if (panel_by != "none" && panel_by %in% names(rv$data)) {
+            mf <- model.frame(m)
+            if (nrow(dd) == nrow(mf)) {
+              # Use model frame rownames to index back into rv$data
+              mf_rows <- as.integer(rownames(mf))
+              if (all(!is.na(mf_rows)) && max(mf_rows) <= nrow(rv$data)) {
+                dd$.panel <- as.factor(rv$data[[panel_by]][mf_rows])
+              } else {
+                # Fallback: direct assignment if model frame rows match
+                dd$.panel <- as.factor(mf[[panel_by]])
+              }
+            } else if (panel_by %in% names(model.frame(m))) {
+              dd$.panel <- as.factor(model.frame(m)[[panel_by]])
+            }
+          }
           all_dd[[mn]] <- dd
         }
       }
@@ -1677,7 +1935,122 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
         labs(title = paste("Leverage plot \u2014", term),
              x = paste(term, "| others"), y = "Response | others") +
         theme_app()
+      if (panel_by != "none" && ".panel" %in% names(combined))
+        p <- p + facet_wrap(~ .panel)
       ggplotly(p)
+    })
+
+    # ── Side-by-Side Effects + Leverage ─────────────────────────────────
+
+    # Effects plot for SBS tab — mirrors effects_plot
+    output$effects_plot_sbs <- renderPlotly({
+      # Trigger same reactive dependencies
+      am <- active_models()
+      req(length(am) > 0, input$effects_term)
+      # Reuse: read the effects_plot output by duplicating the logic
+      # This is a lightweight proxy — the actual computation runs in effects_plot
+      term <- input$effects_term
+      factor_cols <- factors_()
+      term_parts  <- strsplit(term, ":")[[1]]
+      is_factor_term <- all(term_parts %in% factor_cols) &&
+        all(sapply(term_parts, function(cn) (rv$col_types[[cn]] %||% "Factor") == "Factor"))
+      if (is_factor_term) {
+        spec <- term; spec_terms <- strsplit(spec, ":")[[1]]
+        is_interaction <- length(spec_terms) > 1
+        if (is_interaction) {
+          x_fac <- spec_terms[1]; tr_fac <- spec_terms[2]
+          int_dfs <- lapply(names(am), function(mn) {
+            em <- tryCatch(suppressMessages(emmeans::emmeans(am[[mn]], specs=spec_terms)), error=function(e)NULL)
+            if (is.null(em)) return(NULL)
+            df <- as.data.frame(summary(em)); df$model <- mn; df
+          })
+          int_df <- bind_rows(Filter(Negate(is.null), int_dfs))
+          if (nrow(int_df) == 0) return(plotly_empty())
+          int_df[[x_fac]] <- factor(int_df[[x_fac]]); int_df[[tr_fac]] <- factor(int_df[[tr_fac]])
+          y_col <- if ("emmean" %in% names(int_df)) "emmean" else names(int_df)[3]
+          resp_name <- tryCatch(names(model.frame(am[[1]]))[1], error=function(e) "Response")
+          p <- ggplot(int_df, aes_string(x=x_fac, y=y_col, colour=tr_fac, group=tr_fac)) +
+            geom_point(size=3) + geom_line(linewidth=0.8) +
+            cat_scale_colour()(name=tr_fac) +
+            labs(title=paste("Interaction:", x_fac, "\u00d7", tr_fac), x=x_fac,
+                 y=paste("LS Mean of", resp_name)) + theme_app()
+          if (length(unique(int_df$model)) > 1) p <- p + facet_wrap(~model)
+          return(ggplotly(p))
+        }
+        ls_list <- lapply(names(am), function(mn) get_lsmeans_df(am[[mn]], spec, mn))
+        ls_df <- bind_rows(Filter(Negate(is.null), ls_list))
+        if (nrow(ls_df) == 0) return(plotly_empty())
+        x_col <- spec_terms[1]; y_col <- if ("emmean" %in% names(ls_df)) "emmean" else names(ls_df)[2]
+        p <- ggplot(ls_df, aes_string(x=x_col, y=y_col, colour="model", group="model")) +
+          geom_point(size=3, position=position_dodge(0.3)) + cat_scale_colour()(name="Model") +
+          labs(title=paste("LS Means \u2014", spec), x=x_col, y="LS Mean") + theme_app()
+        return(ggplotly(p))
+      }
+      # Covariate
+      cov <- term
+      relevant <- Filter(function(m) cov %in% names(model.frame(m)), am)
+      if (length(relevant) == 0) return(plotly_empty())
+      eff_list <- lapply(names(relevant), function(mn) get_effects_df(relevant[[mn]], cov, mn))
+      eff_df <- bind_rows(Filter(Negate(is.null), eff_list))
+      if (nrow(eff_df) == 0) return(plotly_empty())
+      resp_name <- names(model.frame(relevant[[1]]))[1]
+      p <- ggplot(eff_df, aes(x=x, y=fit, colour=model, fill=model)) +
+        geom_ribbon(aes(ymin=lwr, ymax=upr), alpha=0.15, colour="transparent") +
+        geom_line(linewidth=1) + cat_scale_colour()(name="Model") + cat_scale_fill()(name="Model") +
+        labs(title=paste("Partial effect of", cov), x=cov, y=paste("Predicted", resp_name)) +
+        guides(fill="none") + theme_app()
+      ggplotly(p)
+    })
+
+    # Leverage plot for SBS tab — mirrors leverage_plot_combined
+    output$leverage_plot_sbs <- renderPlotly({
+      am <- active_models()
+      req(length(am) > 0, input$effects_term)
+      term <- input$effects_term
+      all_dd <- list()
+      for (mn in names(am)) {
+        m <- am[[mn]]
+        tl <- attr(terms(m), "term.labels")
+        if (!(term %in% tl)) next
+        lev_data <- tryCatch(leverage_plot_data(m), error=function(e)list())
+        dd <- lev_data[[term]]
+        if (!is.null(dd) && nrow(dd) > 0) {
+          dd$Model <- mn
+          fit <- tryCatch(lm(y_residual ~ x_residual, data=dd), error=function(e)NULL)
+          dd$fitted_line <- if (!is.null(fit)) fitted(fit) else NA_real_
+          all_dd[[mn]] <- dd
+        }
+      }
+      if (length(all_dd) == 0)
+        return(plotly_empty() %>% layout(title=plotly_title(paste("Leverage \u2014", term, "\nNot available"), size=12)))
+      combined <- do.call(rbind, all_dd); rownames(combined) <- NULL
+      n_models <- length(unique(combined$Model))
+      cols <- cat_palette()(max(n_models, 2))
+      p <- ggplot(combined, aes(x=x_residual, y=y_residual, colour=Model)) +
+        geom_point(alpha=0.6, size=2) + geom_line(aes(y=fitted_line), linewidth=0.9) +
+        geom_hline(yintercept=0, linetype="dashed", colour="grey60") +
+        scale_colour_manual(values=setNames(cols[seq_len(n_models)], unique(combined$Model))) +
+        labs(title=paste("Leverage \u2014", term), x=paste(term, "| others"), y="Response | others") +
+        theme_app()
+      ggplotly(p)
+    })
+
+    # Effects table for SBS tab — mirrors effects_table
+    output$effects_table_sbs <- DT::renderDataTable({
+      # Delegate to the same data as effects_table by triggering the same logic
+      req(length(active_models()) > 0, input$effects_term)
+      term <- input$effects_term
+      factor_cols <- factors_()
+      term_parts <- strsplit(term, ":")[[1]]
+      is_factor_term <- all(term_parts %in% factor_cols)
+      if (!is_factor_term) return(NULL)
+      spec <- term
+      ls_list <- lapply(names(active_models()), function(mn) {
+        get_lsmeans_df(active_models()[[mn]], spec, mn)
+      })
+      ls_df <- bind_rows(Filter(Negate(is.null), ls_list))
+      if (nrow(ls_df) == 0) return(NULL)
+      dt_table(ls_df, rownames=FALSE, options=list(pageLength=PAGE_LEN_DEFAULT))
     })
 
     # ── Contour / Surface Plots ──────────────────────────────────────────
@@ -1759,26 +2132,23 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
           nm <- names(mods)[idx]
           m <- mods[[idx]]
 
-          output[[plot_ids[idx]]] <- renderPlotly({
+          # Helper: build prediction grid for this model
+          build_contour_grid <- function() {
             x_var <- input$contour_x
             y_var <- input$contour_y
             grid_n <- input$contour_grid_n %||% 30
-
             x_vals <- rv$data[[x_var]]
             y_vals <- rv$data[[y_var]]
             req(is.numeric(x_vals), is.numeric(y_vals))
-
             x_seq <- seq(min(x_vals, na.rm = TRUE), max(x_vals, na.rm = TRUE), length.out = grid_n)
             y_seq <- seq(min(y_vals, na.rm = TRUE), max(y_vals, na.rm = TRUE), length.out = grid_n)
             grid_df <- expand.grid(setNames(list(x_seq, y_seq), c(x_var, y_var)))
-
             term_labels <- attr(terms(m), "term.labels")
             base_vars <- unique(unlist(lapply(term_labels, function(t) {
               t <- gsub("I\\(([^\\^]+)\\^[0-9]+\\)", "\\1", t)
               strsplit(t, ":")[[1]]
             })))
             hold_vars <- setdiff(base_vars, c(x_var, y_var))
-
             for (v in hold_vars) {
               hold_input <- input[[paste0("contour_hold_", v)]]
               if (!is.null(hold_input)) {
@@ -1788,61 +2158,96 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
                 grid_df[[v]] <- if (is.numeric(vals)) mean(vals, na.rm = TRUE) else levels(factor(vals))[1]
               }
             }
-
             for (v in names(grid_df)) {
-              if (v %in% names(rv$col_types) && rv$col_types[[v]] == "Factor") {
+              if (v %in% names(rv$col_types) && rv$col_types[[v]] == "Factor")
                 grid_df[[v]] <- factor(grid_df[[v]], levels = levels(factor(rv$data[[v]])))
-              }
             }
             for (v in names(grid_df)) {
-              if (is.factor(grid_df[[v]])) {
+              if (is.factor(grid_df[[v]]))
                 contrasts(grid_df[[v]]) <- contr.sum(nlevels(grid_df[[v]]))
-              }
             }
-
             pred <- tryCatch(predict(m, newdata = grid_df), error = function(e) NULL)
-            if (is.null(pred)) return(plotly_empty() %>% layout(title = plotly_title(paste(nm, "- prediction error"), size=12)))
+            if (is.null(pred)) return(NULL)
+            list(x_seq = x_seq, y_seq = y_seq, z_mat = matrix(pred, nrow = grid_n, ncol = grid_n))
+          }
 
-            z_mat <- matrix(pred, nrow = grid_n, ncol = grid_n)
-
-            if (identical(input$contour_type, "surface")) {
-              plot_ly(x = x_seq, y = y_seq, z = z_mat, type = "surface",
+          # Contour-only or surface-only
+          output[[plot_ids[idx]]] <- renderPlotly({
+            ctype <- input$contour_type
+            req(ctype %in% c("contour", "surface"))
+            g <- build_contour_grid()
+            if (is.null(g)) return(plotly_empty() %>% layout(title = plotly_title(paste(nm, "- prediction error"), size=12)))
+            x_var <- input$contour_x; y_var <- input$contour_y
+            if (identical(ctype, "surface")) {
+              plot_ly(x = g$x_seq, y = g$y_seq, z = g$z_mat, type = "surface",
                       colorscale = "Viridis", showscale = TRUE) %>%
                 layout(title = plotly_title(nm, size = 13),
-                       scene = list(
-                         xaxis = list(title = x_var),
-                         yaxis = list(title = y_var),
-                         zaxis = list(title = "Predicted")))
+                       scene = list(xaxis = list(title = x_var), yaxis = list(title = y_var),
+                                    zaxis = list(title = "Predicted")))
             } else {
-              plot_ly(x = x_seq, y = y_seq, z = z_mat, type = "contour",
-                      colorscale = "Viridis",
-                      contours = list(showlabels = TRUE),
+              plot_ly(x = g$x_seq, y = g$y_seq, z = g$z_mat, type = "contour",
+                      colorscale = "Viridis", contours = list(showlabels = TRUE),
                       showscale = TRUE) %>%
                 layout(title = plotly_title(nm, size = 13),
-                       xaxis = list(title = x_var),
-                       yaxis = list(title = y_var))
+                       xaxis = list(title = x_var), yaxis = list(title = y_var))
             }
+          })
+
+          # Side-by-side: contour + surface
+          output[[paste0(plot_ids[idx], "_contour")]] <- renderPlotly({
+            g <- build_contour_grid()
+            if (is.null(g)) return(plotly_empty())
+            x_var <- input$contour_x; y_var <- input$contour_y
+            plot_ly(x = g$x_seq, y = g$y_seq, z = g$z_mat, type = "contour",
+                    colorscale = "Viridis", contours = list(showlabels = TRUE),
+                    showscale = TRUE) %>%
+              layout(title = plotly_title(paste(nm, "- Contour"), size = 12),
+                     xaxis = list(title = x_var), yaxis = list(title = y_var))
+          })
+          output[[paste0(plot_ids[idx], "_surface")]] <- renderPlotly({
+            g <- build_contour_grid()
+            if (is.null(g)) return(plotly_empty())
+            x_var <- input$contour_x; y_var <- input$contour_y
+            plot_ly(x = g$x_seq, y = g$y_seq, z = g$z_mat, type = "surface",
+                    colorscale = "Viridis", showscale = TRUE) %>%
+              layout(title = plotly_title(paste(nm, "- Surface"), size = 12),
+                     scene = list(xaxis = list(title = x_var), yaxis = list(title = y_var),
+                                  zaxis = list(title = "Predicted")))
           })
         })
       })
 
-      height <- if (identical(input$contour_type, "surface")) "500px" else "450px"
+      ctype <- input$contour_type
       n <- length(mods)
-      rows <- lapply(seq(1, n, by = 2), function(i) {
-        cols <- list(
-          column(6,
+
+      if (identical(ctype, "both")) {
+        # Side-by-side: contour on left, surface on right, one row per model
+        rows <- lapply(seq_along(mods), function(i) {
+          fluidRow(
             h5(names(mods)[i], class = "mt-3"),
-            plotlyOutput(ns(plot_ids[i]), height = height)
+            column(6, plotlyOutput(ns(paste0(plot_ids[i], "_contour")), height = "450px")),
+            column(6, plotlyOutput(ns(paste0(plot_ids[i], "_surface")), height = "500px"))
           )
-        )
-        if (i + 1 <= n) {
-          cols[[2]] <- column(6,
-            h5(names(mods)[i + 1], class = "mt-3"),
-            plotlyOutput(ns(plot_ids[i + 1]), height = height)
+        })
+      } else {
+        # Single type: 2-up layout
+        height <- if (identical(ctype, "surface")) "500px" else "450px"
+        rows <- lapply(seq(1, n, by = 2), function(i) {
+          cols <- list(
+            column(6,
+              h5(names(mods)[i], class = "mt-3"),
+              plotlyOutput(ns(plot_ids[i]), height = height)
+            )
           )
-        }
-        do.call(fluidRow, cols)
-      })
+          if (i + 1 <= n) {
+            cols[[2]] <- column(6,
+              h5(names(mods)[i + 1], class = "mt-3"),
+              plotlyOutput(ns(plot_ids[i + 1]), height = height)
+            )
+          }
+          do.call(fluidRow, cols)
+        })
+      }
       do.call(tagList, rows)
     })
 
@@ -1891,14 +2296,30 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
       sel_models <- names(active_models())
       n_models <- length(sel_models)
       row_h <- max(280, 500 / n_models)
+      mode <- input$profiler_mode %||% "aligned"
+      tw <- input$profiler_term_width %||% 250
+
+      # Compute total width
+      all_vars <- character(0)
+      for (mn in sel_models) {
+        m <- rv$models[[mn]]
+        if (is.null(m)) next
+        mf <- model.frame(m)
+        bv <- all.vars(formula(m))[-1]
+        bv <- intersect(bv, names(mf))
+        all_vars <- union(all_vars, bv)
+      }
+      n_terms <- length(all_vars)
+      total_w <- max(600, n_terms * tw + 80)  # +80 for y-axis labels
+
       tagList(lapply(seq_along(sel_models), function(i) {
         plotlyOutput(ns(paste0("profiler_row_", i)),
-                     width = "100%", height = paste0(row_h, "px"))
+                     width = paste0(total_w, "px"), height = paste0(row_h, "px"))
       }))
     })
 
     # Helper to build one profiler row
-    build_profiler_row <- function(m, model_label, all_vars = NULL) {
+    build_profiler_row <- function(m, model_label, all_vars = NULL, y_limits = NULL) {
       mf <- model.frame(m)
       resp_name <- names(mf)[1]
       base_vars <- all.vars(formula(m))[-1]
@@ -1986,12 +2407,17 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
           g <- g + labs(x = p, y = resp_name)
         }
         g <- g + theme_app()
+        if (!is.null(y_limits)) g <- g + coord_cartesian(ylim = y_limits)
         plots[[p]] <- ggplotly(g, tooltip = c("x", "y"))
       }
 
       if (length(plots) == 0) return(plotly_empty())
       pfont <- list(family = "Arial, Helvetica, sans-serif")
-      subplot(plots, nrows = 1, shareY = TRUE, titleX = TRUE) %>%
+      share_y <- !is.null(y_limits) || identical(input$profiler_y_scale, "shared")
+      # Equal widths per subplot panel to align across model rows
+      n_plots <- length(plots)
+      equal_widths <- rep(1 / n_plots, n_plots)
+      subplot(plots, nrows = 1, shareY = share_y, titleX = TRUE, widths = equal_widths) %>%
         layout(title = list(
                  text = paste(model_label, "\u2014", resp_name,
                               "  [Current:", round(curr_pred, 2), "]"),
@@ -2005,6 +2431,7 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
     observe({
       req(length(active_models()) > 0)
       sel_models <- names(active_models())
+      mode <- input$profiler_mode %||% "aligned"
       all_vars <- character(0)
       for (mn in sel_models) {
         m <- rv$models[[mn]]
@@ -2014,14 +2441,58 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
         bv <- intersect(bv, names(mf))
         all_vars <- union(all_vars, bv)
       }
+      # Compute y-axis limits based on scale mode
+      y_scale <- input$profiler_y_scale %||% "free"
+      y_lim <- NULL
+      if (y_scale == "full") {
+        # Full response range: use raw data + prediction intervals to capture all values
+        all_vals <- tryCatch({
+          resp_name <- names(model.frame(rv$models[[sel_models[1]]]))[1]
+          rv$data[[resp_name]]
+        }, error = function(e) NULL)
+        # Also include prediction intervals from all models
+        for (mn in sel_models) {
+          m_tmp <- rv$models[[mn]]
+          if (is.null(m_tmp)) next
+          tryCatch({
+            pi <- predict(m_tmp, interval = "prediction")
+            all_vals <- c(all_vals, pi[, "lwr"], pi[, "upr"])
+          }, error = function(e) NULL)
+        }
+        if (!is.null(all_vals) && is.numeric(all_vals) && length(all_vals) > 0) {
+          rng <- range(all_vals, na.rm = TRUE)
+          pad <- diff(rng) * 0.05
+          y_lim <- c(rng[1] - pad, rng[2] + pad)
+        }
+      } else if (y_scale == "shared") {
+        # Shared: compute from all predictions across all models INCLUDING CI/PI
+        all_vals <- numeric(0)
+        for (mn in sel_models) {
+          m_tmp <- rv$models[[mn]]
+          if (is.null(m_tmp)) next
+          all_vals <- c(all_vals, fitted(m_tmp))
+          # Also include prediction intervals to ensure full range
+          tryCatch({
+            pi <- predict(m_tmp, interval = "prediction")
+            all_vals <- c(all_vals, pi[, "lwr"], pi[, "upr"])
+          }, error = function(e) NULL)
+        }
+        if (length(all_vals) > 0) {
+          rng <- range(all_vals, na.rm = TRUE)
+          pad <- diff(rng) * 0.1
+          y_lim <- c(rng[1] - pad, rng[2] + pad)
+        }
+      }
+
       for (i in seq_along(sel_models)) {
         local({
           idx <- i
           mn <- sel_models[idx]
-          av <- all_vars
+          av <- if (mode == "aligned") all_vars else NULL
+          yl <- y_lim
           output[[paste0("profiler_row_", idx)]] <- renderPlotly({
             req(rv$models[[mn]])
-            build_profiler_row(rv$models[[mn]], mn, all_vars = av)
+            build_profiler_row(rv$models[[mn]], mn, all_vars = av, y_limits = yl)
           })
         })
       }
@@ -2177,6 +2648,53 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
       pp
     })
 
+    # ── Critical values annotation above MC table ─────────────────────
+    output$mc_critical_values <- renderUI({
+      mc_df <- mc_collect()
+      if (is.null(mc_df) || nrow(mc_df) == 0) return(NULL)
+
+      alpha  <- mc_state$mc_alpha() %||% ALPHA_DEFAULT
+      mods   <- active_models()
+      if (length(mods) == 0) return(NULL)
+      err_df <- df.residual(mods[[1]])
+
+      methods_shown <- unique(mc_df$method)
+
+      # Back-calculate critical values from CI: crit = (upper - lower) / (2 * SE)
+      items <- list()
+      for (m in methods_shown) {
+        sub <- mc_df[mc_df$method == m, , drop = FALSE]
+        cv <- tryCatch({
+          # Use first row with valid SE and CIs
+          row <- sub[!is.na(sub$SE) & !is.na(sub$lower.CL) & !is.na(sub$upper.CL), ][1, ]
+          if (is.na(row$SE) || row$SE <= 0) stop("no valid row")
+          crit <- (row$upper.CL - row$lower.CL) / (2 * row$SE)
+          n_comp <- nrow(sub)
+          if (m == "Student") {
+            sprintf("Student t: t\u2090\u2082,df=%d = %.4f (%d unadjusted comparisons)",
+                    err_df, crit, n_comp)
+          } else if (m == "Tukey") {
+            sprintf("Tukey HSD: q\u2090/\u221a2 = %.4f (df = %d, %d simultaneous comparisons)",
+                    crit, err_df, n_comp)
+          } else if (m == "Dunnett") {
+            sprintf("Dunnett: d\u2090 = %.4f (df = %d, %d comparisons vs control)",
+                    crit, err_df, n_comp)
+          } else if (m == "MaxT") {
+            sprintf("MaxT: mvt-adjusted critical = %.4f (df = %d, %d selected comparisons)",
+                    crit, err_df, n_comp)
+          } else {
+            sprintf("%s: critical = %.4f (df = %d)", m, crit, err_df)
+          }
+        }, error = function(e) m)
+        items <- c(items, list(tags$li(cv)))
+      }
+      tags$div(
+        class = "text-muted small mb-2",
+        tags$strong(paste0("Critical values (\u03b1 = ", alpha, "):")),
+        tags$ul(style = "margin-bottom: 0;", items)
+      )
+    })
+
     output$mc_table <- DT::renderDataTable({
       mc_df <- mc_collect()
       if (is.null(mc_df) || nrow(mc_df) == 0)
@@ -2190,12 +2708,19 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
       num_cols <- intersect(c("estimate", "SE", "lower.CL", "upper.CL", "df"), names(mc_df))
       p_cols <- grep("p.value|p_value|p\\.adj", names(mc_df), value = TRUE)
       alpha <- mc_state$mc_alpha() %||% 0.05
-      dt <- dt_table(mc_df, rownames = FALSE, options = list(pageLength = 20))
+      # Pre-format p-value columns
+      mc_df <- format_pvalue_dt(mc_df, p_cols, alpha = alpha)
+      shadow_p_cols <- paste0("._p_", p_cols)
+      shadow_p_idx <- which(names(mc_df) %in% shadow_p_cols) - 1
+      hide_defs <- if (length(shadow_p_idx) > 0) list(list(visible = FALSE, targets = shadow_p_idx)) else list()
+
+      dt <- dt_table(mc_df, rownames = FALSE, options = list(pageLength = 20, columnDefs = hide_defs))
       for (nc in num_cols) dt <- DT::formatRound(dt, nc, digits = 3)
       for (pc in p_cols) {
+        shadow <- paste0("._p_", pc)
         dt <- DT::formatStyle(dt, pc,
-                 backgroundColor = DT::styleInterval(alpha, c("#c8f7c5", "white")))
-        dt <- DT::formatRound(dt, pc, digits = 4)
+                 backgroundColor = DT::styleInterval(alpha, c(PVALUE_GREEN, "white")),
+                 valueColumns    = shadow)
       }
       dt
     })
@@ -2208,7 +2733,8 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
     # ── Residuals (delegated to mod_results_residuals.R) ─────────────────
     results_residuals_server(input, output, session, rv,
                               active_models, update_model_checkbox,
-                              colour_theme, role_selectors)
+                              colour_theme, role_selectors,
+                              shared_reactives)
 
     # ── Sync mc_show_method / mc_show_term when mc_results change ────────
 
@@ -2237,25 +2763,29 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
     observeEvent(rv$models, {
       if (length(rv$models) == 0) return()
 
-      colour_choices <- c("None" = "none")
       facs <- factors_(); blks <- blocks()
-      if (length(facs) > 1) {
-        trt_lab <- treatment_label()
-        colour_choices <- c(colour_choices, setNames(".treatment", trt_lab))
-      }
-      for (f in facs) colour_choices <- c(colour_choices, setNames(f, f))
-      for (b in blks) colour_choices <- c(colour_choices, setNames(b, paste0(b, " (block)")))
+      colour_choices <- build_colour_choices(
+        factors = facs, blocks = blks,
+        treatment_label = if (length(facs) > 1) treatment_label() else NULL)
       updateSelectInput(session, "resid_colour_by", choices = colour_choices)
+
+      # Leverage panel-by: factors + blocks
+      panel_ch <- c("None" = "none")
+      for (f in facs) panel_ch <- c(panel_ch, setNames(f, f))
+      for (b in blks) panel_ch <- c(panel_ch, setNames(b, paste0(b, " (block)")))
+      updateSelectInput(session, "leverage_panel_by", choices = panel_ch)
 
       all_terms_raw <- unique(unlist(lapply(rv$models, function(m) {
         a <- tryCatch(model_anova(m, type=3), error=function(e) NULL)
         if (!is.null(a)) rownames(a)[rownames(a) != "(Intercept)"] else character(0)
       })))
       factor_cols  <- factors_()
+      block_cols   <- blocks()
+      factor_or_block <- c(factor_cols, block_cols)
 
       all_factor_terms <- all_terms_raw[sapply(all_terms_raw, function(t) {
         parts <- strsplit(t, ":")[[1]]
-        if (!all(parts %in% factor_cols)) return(FALSE)
+        if (!all(parts %in% factor_or_block)) return(FALSE)
         if (all(sapply(parts, function(cn) (rv$col_types[[cn]] %||% "Factor") == "Factor")))
           return(TRUE)
         length(parts) == 1
@@ -2272,8 +2802,15 @@ mod_results_server <- function(id, rv, colour_theme, role_selectors,
                         selected = cat_factor_terms[1])
 
       cov_cols <- all_covariates()
-      effects_choices <- c(all_factor_terms, setNames(cov_cols, cov_cols))
-      if (length(rv$alias_labels) > 0) {
+      # Include blocks that are model terms (may not pass the factor-type filter)
+      block_in_model <- intersect(block_cols, all_terms_raw)
+      block_add <- setdiff(block_in_model, all_factor_terms)
+      effects_choices <- all_factor_terms
+      if (length(block_add) > 0)
+        effects_choices <- c(effects_choices, setNames(block_add, paste0(block_add, " (block)")))
+      if (length(cov_cols) > 0)
+        effects_choices <- c(effects_choices, setNames(cov_cols, cov_cols))
+      if (length(rv$alias_labels) > 0 && length(effects_choices) > 0) {
         display_names <- relabel_alias_terms(effects_choices, rv$alias_labels)
         names(effects_choices) <- display_names
       }

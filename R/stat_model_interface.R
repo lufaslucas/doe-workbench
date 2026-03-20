@@ -14,9 +14,16 @@
 # Fit a model given formula, data, and contrasts.
 # type: "lm" (default), "lmer" or "glm" in future
 # ---------------------------------------------------------------------------
-model_fit <- function(formula, data, contrasts = NULL, type = "lm") {
+model_fit <- function(formula, data, contrasts = NULL, type = "lm",
+                      weights = NULL, ...) {
   switch(type,
-    lm = lm(formula, data = data, contrasts = contrasts),
+    lm = {
+      if (!is.null(weights)) {
+        lm(formula, data = data, contrasts = contrasts, weights = weights, ...)
+      } else {
+        lm(formula, data = data, contrasts = contrasts, ...)
+      }
+    },
     stop("Model type '", type, "' not yet supported.")
   )
 }
@@ -32,7 +39,13 @@ model_refit <- function(model, data) {
 model_refit.lm <- function(model, data) {
   ctr <- model$contrasts
   if (length(ctr) == 0) ctr <- NULL
-  lm(formula(model), data = data, contrasts = ctr)
+  # Preserve weights if the original model used them
+  w <- model$weights
+  if (!is.null(w) && length(w) == nrow(data)) {
+    lm(formula(model), data = data, contrasts = ctr, weights = w)
+  } else {
+    lm(formula(model), data = data, contrasts = ctr)
+  }
 }
 
 model_refit.default <- model_refit.lm

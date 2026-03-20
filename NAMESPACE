@@ -1,4 +1,4 @@
-# NAMESPACE — Generated for DoEWorkbench package
+# NAMESPACE — Generated for doe.workbench package
 # Export all non-dot-prefixed objects (functions, constants, modules)
 exportPattern("^[^\\.]")
 
@@ -24,6 +24,7 @@ import(multcomp)
 
 # I/O
 import(readxl)
+import(openxlsx)
 import(rmarkdown)
 import(flextable)
 import(base64enc)

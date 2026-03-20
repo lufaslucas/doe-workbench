@@ -3,29 +3,84 @@
 # ── UI ───────────────────────────────────────────────────────────────────────
 mod_explore_ui <- function(id) {
   ns <- NS(id)
-  sidebarLayout(
-    sidebarPanel(width = 3,
-      selectInput(ns("explore_response"), "Response variable", choices = NULL),
-      selectInput(ns("explore_colour_by"), "Colour by",
-                  choices = c("None" = "none"), selected = "none"),
-      selectInput(ns("explore_facet_by"), "Facet by",
-                  choices = c("None" = "none"), selected = "none"),
-      radioButtons(ns("explore_facet_mode"), "Facet mode",
-                   choices = c("Wrap" = "wrap", "Row" = "row", "Col" = "col"),
-                   selected = "wrap", inline = TRUE),
-      radioButtons(ns("explore_smooth"), "Fit / connect",
-                   choices = c("Linear" = "lm", "Smoother" = "loess",
-                               "Connected" = "connected"),
-                   selected = "lm", inline = TRUE),
-      sliderInput(ns("explore_line_width"), "Line width",
-                  min = 0.5, max = 5, value = 1, step = 0.5),
-      hr(),
-      sliderInput(ns("explore_jitter"), "Jitter amount",
-                  min = 0, max = 0.4, value = 0.05, step = 0.01),
-      checkboxInput(ns("explore_jitter_replicated"), "Only jitter replicated points", value = TRUE)
+  tagList(
+    wellPanel(
+      fluidRow(
+        column(2, selectInput(ns("explore_response"), "Response variable", choices = NULL)),
+        column(2,
+          selectInput(ns("explore_colour_by"), "Colour by",
+                      choices = c("None" = "none"), selected = "none")
+        ),
+        column(2,
+          selectInput(ns("explore_facet_by"), "Facet by",
+                      choices = c("None" = "none"), selected = "none"),
+          conditionalPanel(
+            condition = sprintf("input['%s'] == 'Needle Plot' || input['%s'] == 'Parallel Plot'",
+                                ns("explore_tabs"), ns("explore_tabs")),
+            tags$small(class = "text-muted", icon("info-circle"), " Uses own facet control below")
+          )
+        ),
+        column(2,
+          radioButtons(ns("explore_facet_mode"), "Facet mode",
+                       choices = c("Wrap" = "wrap", "Row" = "row", "Col" = "col"),
+                       selected = "wrap", inline = TRUE),
+          conditionalPanel(
+            condition = sprintf("input['%s'] == 'Needle Plot' || input['%s'] == 'Parallel Plot'",
+                                ns("explore_tabs"), ns("explore_tabs")),
+            tags$small(class = "text-muted", icon("info-circle"), " Not linked to current tab")
+          )
+        ),
+        column(2,
+          radioButtons(ns("explore_smooth"), "Fit / connect",
+                       choices = c("Linear" = "lm", "Smoother" = "loess",
+                                   "Connected" = "connected"),
+                       selected = "lm", inline = TRUE),
+          conditionalPanel(
+            condition = sprintf("input['%s'] != 'Covariate Plots'", ns("explore_tabs")),
+            tags$small(class = "text-muted", icon("info-circle"), " Only applies to Covariate Plots")
+          )
+        ),
+        column(2,
+          sliderInput(ns("explore_line_width"), "Line width",
+                      min = 0.5, max = 5, value = 1, step = 0.5),
+          conditionalPanel(
+            condition = sprintf(
+              "input['%s'] != 'Covariate Plots' && input['%s'] != 'Parallel Plot'",
+              ns("explore_tabs"), ns("explore_tabs")),
+            tags$small(class = "text-muted", icon("info-circle"), " Applies to Covariate & Parallel Plots")
+          )
+        )
+      ),
+      fluidRow(
+        column(3,
+          sliderInput(ns("explore_jitter"), "Jitter amount",
+                      min = 0, max = 0.4, value = 0.05, step = 0.01),
+          conditionalPanel(
+            condition = sprintf("input['%s'] != 'By Factor' && input['%s'] != 'By Block'",
+                                ns("explore_tabs"), ns("explore_tabs")),
+            tags$small(class = "text-muted", icon("info-circle"), " Only applies to By Factor / By Block")
+          )
+        ),
+        column(3, div(style = "margin-top: 28px;",
+                      checkboxInput(ns("explore_jitter_replicated"),
+                                    "Only jitter replicated points", value = TRUE)))
+      )
     ),
-    mainPanel(width = 9,
-      tabsetPanel(id = ns("explore_tabs"),
+    fluidRow(
+      column(12,
+        checkboxInput(ns("explore_grid_mode"), "Grid view (all plots)", value = FALSE),
+        tags$style(HTML(paste0(
+          "#", ns("explore_tabs_grid"), ".grid-mode > .nav { display: none !important; }",
+          "#", ns("explore_tabs_grid"), ".grid-mode > .tab-content { display: grid !important; ",
+          "  grid-template-columns: 1fr 1fr; gap: 16px; }",
+          "#", ns("explore_tabs_grid"), ".grid-mode > .tab-content > .tab-pane { ",
+          "  display: block !important; opacity: 1 !important; ",
+          "  border: 1px solid #dee2e6; border-radius: 8px; padding: 12px; }"
+        )))
+      )
+    ),
+    div(id = ns("explore_tabs_grid"),
+    tabsetPanel(id = ns("explore_tabs"),
         tabPanel("Distribution",
           br(),
           plotlyOutput(ns("dist_plot"), height = "450px")
@@ -34,18 +89,19 @@ mod_explore_ui <- function(id) {
           br(),
           fluidRow(
             column(6, selectInput(ns("explore_factor"), "Factor", choices = NULL)),
-            column(6, checkboxInput(ns("explore_show_boxplot"), "Show boxplots", value = TRUE))
+            column(6, div(id = ns("boxplot_toggle_div"),
+                         checkboxInput(ns("explore_show_boxplot"), "Show boxplots", value = TRUE)))
           ),
           plotlyOutput(ns("by_factor_plot"), height = "450px")
+        ),
+        tabPanel("By Block",
+          br(),
+          uiOutput(ns("by_block_ui"))
         ),
         tabPanel("Covariate Plots",
           br(),
           selectInput(ns("explore_covariate"), "Covariate", choices = NULL),
           plotlyOutput(ns("covariate_plot"), height = "500px")
-        ),
-        tabPanel("By Block",
-          br(),
-          uiOutput(ns("by_block_ui"))
         ),
         tabPanel("Needle Plot",
           br(),
@@ -78,11 +134,12 @@ mod_explore_ui <- function(id) {
           plotlyOutput(ns("parallel_plot"), height = "500px")
         )
       )
-    )
+    )  # close grid wrapper div
   )
 }
 
 # ── Server ───────────────────────────────────────────────────────────────────
+
 mod_explore_server <- function(id, rv, colour_theme, role_selectors,
                                shared_reactives) {
   moduleServer(id, function(input, output, session) {
@@ -96,6 +153,7 @@ mod_explore_server <- function(id, rv, colour_theme, role_selectors,
     all_covariates <- role_selectors$all_covariates
     treatment      <- shared_reactives$treatment
     treatment_label <- shared_reactives$treatment_label
+    analysis_mode  <- shared_reactives$analysis_mode
 
     cat_palette       <- colour_theme$cat_palette
     default_col       <- colour_theme$default_col
@@ -104,26 +162,47 @@ mod_explore_server <- function(id, rv, colour_theme, role_selectors,
     cont_scale_colour <- colour_theme$cont_scale_colour
     cont_plotly_cs    <- colour_theme$cont_plotly_cs
 
+    # Grid mode toggle: add/remove CSS class on wrapper div
+    observeEvent(input$explore_grid_mode, {
+      grid_id <- ns("explore_tabs_grid")
+      if (isTRUE(input$explore_grid_mode)) {
+        shinyjs::addClass(id = "explore_tabs_grid", class = "grid-mode", asis = FALSE)
+      } else {
+        shinyjs::removeClass(id = "explore_tabs_grid", class = "grid-mode", asis = FALSE)
+      }
+    }, ignoreInit = TRUE)
+
     # ── Dropdown updates ───────────────────────────────────────────────────
     observe({
       updateSelectInput(session, "explore_response",  choices = responses())
-      updateSelectInput(session, "explore_factor",    choices = factors_())
+      # In comparative mode, put treatment combination first in factor choices
+      fac_choices <- factors_()
+      if (analysis_mode() == "comparative" && length(fac_choices) > 0) {
+        trt_lab <- treatment_label()
+        fac_choices <- c(setNames(".treatment", trt_lab), fac_choices)
+      }
+      updateSelectInput(session, "explore_factor",    choices = fac_choices)
       updateSelectInput(session, "explore_covariate", choices = all_covariates())
 
       cols <- names(rv$data %||% data.frame())
       trt_lab <- treatment_label()
-      colour_ch <- c("None" = "none", setNames(".treatment", trt_lab))
-      for (cn in cols) colour_ch <- c(colour_ch, setNames(cn, cn))
+      mode <- analysis_mode()
+      colour_ch <- build_colour_choices(
+        all_cols = cols, treatment_label = trt_lab,
+        include_treatment = (mode == "comparative"))
       updateSelectInput(session, "explore_colour_by", choices = colour_ch)
 
       facet_ch <- c("None" = "none")
       facs_in <- intersect(factors_(), names(rv$data %||% data.frame()))
-      if (length(facs_in) > 1)
+      if (mode == "comparative" && length(facs_in) > 1)
         facet_ch <- c(facet_ch, setNames(".treatment", trt_lab))
       for (b in blocks()) facet_ch <- c(facet_ch, setNames(b, b))
       for (f in factors_()) facet_ch <- c(facet_ch, setNames(f, f))
       for (cv in covariates()) facet_ch <- c(facet_ch, setNames(cv, paste0(cv, " (cov)")))
       updateSelectInput(session, "explore_facet_by", choices = facet_ch)
+
+      # Hide boxplot toggle in regression mode (boxplots only for comparative)
+      shinyjs::toggle("boxplot_toggle_div", condition = (mode == "comparative"))
     })
 
     # ── Colour helper ──────────────────────────────────────────────────────
@@ -159,8 +238,9 @@ mod_explore_server <- function(id, rv, colour_theme, role_selectors,
       pal <- cat_palette()
       if (!is.null(cv)) {
         if (is.numeric(cv)) {
-          df$.colour <- cut(cv, breaks = min(5, length(unique(cv))),
-                            ordered_result = TRUE)
+          n_uniq <- length(unique(cv))
+          df$.colour <- if (n_uniq <= 1) as.factor(cv)
+                        else cut(cv, breaks = min(5, n_uniq), ordered_result = TRUE)
         } else {
           df$.colour <- cv
         }
@@ -187,9 +267,16 @@ mod_explore_server <- function(id, rv, colour_theme, role_selectors,
     output$by_factor_plot <- renderPlotly({
       req(rv$data, input$explore_response, input$explore_factor)
       resp <- input$explore_response; fac <- input$explore_factor
-      req(resp %in% names(rv$data), fac %in% names(rv$data))
-      df <- rv$data; df[[fac]] <- as.factor(df[[fac]])
+      df <- rv$data
       trt <- treatment()
+
+      # Handle .treatment as a virtual factor column
+      if (fac == ".treatment") {
+        req(!is.null(trt))
+        df$.treatment <- trt
+      }
+      req(fac %in% names(df))
+      df[[fac]] <- as.factor(df[[fac]])
       cv  <- explore_colour()
       show_box <- isTRUE(input$explore_show_boxplot)
 
@@ -259,7 +346,10 @@ mod_explore_server <- function(id, rv, colour_theme, role_selectors,
         p("No block variable assigned.", class = "text-muted p-3")
       } else {
         tagList(
-          selectInput(ns("explore_block"), "Block variable", choices = blocks()),
+          fluidRow(
+            column(6, selectInput(ns("explore_block"), "Block variable", choices = blocks())),
+            column(6, checkboxInput(ns("block_connect_trt"), "Connect by treatment", value = FALSE))
+          ),
           plotlyOutput(ns("by_block_plot"), height = "500px")
         )
       }
@@ -273,10 +363,13 @@ mod_explore_server <- function(id, rv, colour_theme, role_selectors,
       trt <- treatment()
       cv  <- explore_colour()
       if (!is.null(trt)) df$.treatment <- trt
+      connect_trt <- isTRUE(input$block_connect_trt) && !is.null(trt)
 
       jit <- input$explore_jitter %||% 0.05
       rep_only <- isTRUE(input$explore_jitter_replicated)
       jw <- smart_jitter_width(df, blk, jit, rep_only)
+
+      p <- ggplot(df, aes_string(x = blk, y = resp))
 
       if (!is.null(trt)) {
         trt_lab <- treatment_label()
@@ -284,7 +377,10 @@ mod_explore_server <- function(id, rv, colour_theme, role_selectors,
           df$.colour <- cv
           is_cont_cv <- is.numeric(cv)
           p <- ggplot(df, aes_string(x = blk, y = resp))
-          p <- p + geom_boxplot(colour = "black", fill = NA, alpha = 0.6, outlier.shape = NA)
+          if (connect_trt) {
+            p <- p + geom_line(aes(group = .treatment, linetype = .treatment),
+                               colour = "grey60", linewidth = 0.5, alpha = 0.6)
+          }
           p <- p + geom_jitter(aes(shape = .treatment, colour = .colour,
                                    key = .data[[ROW_ID_COL]]),
                         width = jw, alpha = 0.7, size = 2) +
@@ -292,7 +388,10 @@ mod_explore_server <- function(id, rv, colour_theme, role_selectors,
           if (is_cont_cv) p <- p + cont_scale_colour()() else p <- p + cat_scale_colour()()
         } else {
           p <- ggplot(df, aes_string(x = blk, y = resp))
-          p <- p + geom_boxplot(colour = "black", fill = NA, alpha = 0.6, outlier.shape = NA)
+          if (connect_trt) {
+            p <- p + geom_line(aes(group = .treatment, linetype = .treatment),
+                               colour = "grey60", linewidth = 0.5, alpha = 0.6)
+          }
           p <- p + geom_jitter(aes(shape = .treatment, key = .data[[ROW_ID_COL]]),
                                width = jw, alpha = 0.7, size = 2) +
             labs(shape = trt_lab)
@@ -302,18 +401,17 @@ mod_explore_server <- function(id, rv, colour_theme, role_selectors,
           df$.colour <- cv
           is_cont_cv <- is.numeric(cv)
           p <- ggplot(df, aes_string(x = blk, y = resp))
-          p <- p + geom_boxplot(colour = "black", fill = NA, alpha = 0.6, outlier.shape = NA)
           p <- p + geom_jitter(aes(colour = .colour, key = .data[[ROW_ID_COL]]),
                                width = jw, alpha = 0.7, size = 2) +
             labs(colour = input$explore_colour_by)
           if (is_cont_cv) p <- p + cont_scale_colour()() else p <- p + cat_scale_colour()()
         } else {
           p <- ggplot(df, aes_string(x = blk, y = resp))
-          p <- p + geom_boxplot(colour = "black", fill = NA, alpha = 0.6, outlier.shape = NA)
           p <- p + geom_jitter(aes(key = .data[[ROW_ID_COL]]),
                                width = jw, alpha = 0.7, size = 2)
         }
       }
+      if (connect_trt) p <- p + labs(linetype = treatment_label())
       p <- p + labs(title = paste(resp, "by block:", blk), x = blk, y = resp) + theme_app()
       p <- explore_facet(p)
       ggplotly(p, source = SEL_SOURCE) %>%
@@ -476,17 +574,33 @@ mod_explore_server <- function(id, rv, colour_theme, role_selectors,
       # Merge group mean onto df for tooltip access; needle uses trt_means directly
       df <- merge(df, trt_means, by = ".trt_id", all.x = TRUE)
 
+      # Grand mean reference line data — constrained to data range, not full axis
+      n_levels <- nlevels(trt_means$.trt_id)
+      ref_line_df <- data.frame(x = 1, xend = n_levels, y = grand_mean, yend = grand_mean)
+
+      dcol <- default_col()
       if (has_colour) {
         df$.colour <- cv
         is_cont <- is.numeric(cv)
         if (!is_cont) df$.colour <- as.factor(df$.colour)
-        dcol <- default_col()
         p <- ggplot(df, aes(x = .trt_id, y = .data[[resp_col]])) +
-          geom_hline(yintercept = grand_mean, colour = "grey40", linewidth = 0.8) +
+          # Grand mean reference line
+          geom_segment(data = ref_line_df,
+                       aes(x = x, xend = xend, y = y, yend = yend),
+                       colour = "grey40", linewidth = 0.8, inherit.aes = FALSE) +
+          # Group-mean needles (grand mean -> group mean)
           geom_segment(data = trt_means,
                        aes(x = .trt_id, xend = .trt_id,
                            y = grand_mean, yend = .group_mean),
-                       colour = dcol, linewidth = 1.2) +
+                       colour = dcol, linewidth = 1.5) +
+          # Group mean markers (diamond)
+          geom_point(data = trt_means,
+                     aes(x = .trt_id, y = .group_mean),
+                     shape = 18, size = 4, colour = dcol, inherit.aes = FALSE) +
+          # Individual needles (data point -> group mean)
+          geom_segment(aes(x = .trt_id, xend = .trt_id,
+                           y = .group_mean, yend = .data[[resp_col]]),
+                       colour = "grey70", linewidth = 0.5) +
           geom_point(aes(colour = .colour), size = 2.5, alpha = 0.8)
         if (is_cont) {
           p <- p + cont_scale_colour()()
@@ -494,13 +608,22 @@ mod_explore_server <- function(id, rv, colour_theme, role_selectors,
           p <- p + cat_scale_colour()()
         }
       } else {
-        dcol <- default_col()
-        p <- ggplot(df, aes_string(x = ".trt_id", y = resp_col)) +
-          geom_hline(yintercept = grand_mean, colour = "grey40", linewidth = 0.8) +
+        p <- ggplot(df, aes(x = .trt_id, y = .data[[resp_col]])) +
+          geom_segment(data = ref_line_df,
+                       aes(x = x, xend = xend, y = y, yend = yend),
+                       colour = "grey40", linewidth = 0.8, inherit.aes = FALSE) +
           geom_segment(data = trt_means,
                        aes(x = .trt_id, xend = .trt_id,
                            y = grand_mean, yend = .group_mean),
-                       colour = dcol, linewidth = 1.2) +
+                       colour = dcol, linewidth = 1.5) +
+          # Group mean markers (diamond)
+          geom_point(data = trt_means,
+                     aes(x = .trt_id, y = .group_mean),
+                     shape = 18, size = 4, colour = dcol, inherit.aes = FALSE) +
+          # Individual needles (data point -> group mean)
+          geom_segment(aes(x = .trt_id, xend = .trt_id,
+                           y = .group_mean, yend = .data[[resp_col]]),
+                       colour = "grey70", linewidth = 0.5) +
           geom_point(colour = dcol, size = 2.5, alpha = 0.8)
       }
 
@@ -597,54 +720,8 @@ mod_explore_server <- function(id, rv, colour_theme, role_selectors,
         }
       })
 
-      fb <- input$explore_facet_by %||% "none"
-      has_facet <- fb != "none" && (fb == ".treatment" || fb %in% names(df))
-
-      if (has_facet) {
-        if (fb == ".treatment") {
-          trt <- treatment()
-          if (!is.null(trt)) df$.facet <- trt else has_facet <- FALSE
-        } else {
-          df$.facet <- as.factor(df[[fb]])
-        }
-      }
-
-      if (has_facet) {
-        facet_lvls <- levels(as.factor(df$.facet))
-        plots <- lapply(facet_lvls, function(lvl) {
-          sub_df <- df[df$.facet == lvl, , drop = FALSE]
-          sub_dims <- lapply(vars, function(v) {
-            vals <- sub_df[[v]]
-            if (is.numeric(vals)) {
-              list(label = v, values = vals,
-                   range = c(min(df[[v]], na.rm = TRUE), max(df[[v]], na.rm = TRUE)))
-            } else {
-              lvls_all <- sort(unique(as.character(df[[v]])))
-              list(label = v, values = match(as.character(vals), lvls_all),
-                   tickvals = seq_along(lvls_all), ticktext = lvls_all,
-                   range = c(0.5, length(lvls_all) + 0.5))
-            }
-          })
-          sub_line <- if (has_colour && colour_var %in% names(sub_df)) {
-            if (is.numeric(sub_df[[colour_var]])) {
-              list(color = sub_df[[colour_var]], colorscale = cs,
-                   showscale = FALSE, width = par_lw)
-            } else {
-              list(color = as.numeric(as.factor(sub_df[[colour_var]])),
-                   colorscale = cs, showscale = FALSE, width = par_lw)
-            }
-          } else {
-            list(color = default_col(), width = par_lw)
-          }
-          plot_ly(type = "parcoords", line = sub_line, dimensions = sub_dims) %>%
-            layout(title = plotly_title(lvl, size = 12))
-        })
-        subplot(plots, nrows = length(facet_lvls), shareX = TRUE) %>%
-          layout(title = plotly_title(paste("Parallel Coordinates by", fb)))
-      } else {
-        plot_ly(type = "parcoords", line = line_spec, dimensions = dims) %>%
-          layout(title = plotly_title("Parallel Coordinates Plot"))
-      }
+      plot_ly(type = "parcoords", line = line_spec, dimensions = dims) %>%
+        layout(title = plotly_title("Parallel Coordinates Plot"))
     })
   })
 }

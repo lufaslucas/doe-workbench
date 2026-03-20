@@ -1,0 +1,15 @@
+"Run Order","Treatment","Date Block","Temperature","Fuel Economy"
+1,"Inferior","Block 1",24.59,3.13735524
+2,"Inferior","Block 1",25.91,3.08747662
+3,"Competitor","Block 1",24.73,1.05149627
+4,"Superior","Block 1",25.17,4.95191772
+5,"Superior","Block 1",25.21,4.96572506
+6,"Inferior","Block 1",25.59,3.29552649
+7,"Superior","Block 1",24.5,4.86910073
+8,"Inferior","Block 1",26.08,3.01826441
+9,"Competitor","Block 1",25.16,1.86536197
+10,"Competitor","Block 2",29.96,6.16844838
+11,"Inferior","Block 2",30.5,7.17110734
+12,"Inferior","Block 2",29.78,7.82698854
+13,"Competitor","Block 2",29.7,5.57654886
+14,"Superior","Block 2",29.69,8.72774794

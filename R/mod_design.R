@@ -36,7 +36,11 @@ mod_design_ui <- function(id) {
                        value = 0.99, min = 0.5, max = 1, step = 0.01),
           actionButton(ns("alias_auto_fill"), "Reset to defaults",
                        class = "btn-outline-secondary btn-sm w-100 mt-2",
-                       icon = icon("undo"))
+                       icon = icon("undo")),
+          downloadButton(ns("download_design_template"),
+                         "Download Template",
+                         class = "btn-outline-primary btn-sm w-100 mt-1",
+                         icon = icon("file-excel"))
         )
       )
     ),
@@ -53,14 +57,16 @@ mod_design_ui <- function(id) {
                 radioButtons(ns("design_matrix_mode"), "Display mode",
                              choices = c("Coded dataset" = "coded",
                                          "Model formula terms" = "model",
-                                         "Model + alias terms" = "alias"),
+                                         "Model + alias terms" = "alias",
+                                         "Effects (1 col per df)" = "effects"),
                              selected = "coded", inline = TRUE)
               ),
               column(8,
                 p(class = "text-muted small mt-2",
                   tags$b("Coded dataset:"), " all columns at their coded/transformed levels. ",
                   tags$b("Model formula:"), " expanded model matrix columns for the design model. ",
-                  tags$b("Model + alias:"), " model matrix plus additional alias formula terms.")
+                  tags$b("Model + alias:"), " model matrix plus additional alias formula terms. ",
+                  tags$b("Effects:"), " one column per degree of freedom (contrast-expanded).")
               )
             ),
             DT::dataTableOutput(ns("design_matrix_table"))
@@ -69,30 +75,38 @@ mod_design_ui <- function(id) {
           tabPanel("Scatterplot Matrix",
             br(),
             fluidRow(
-              column(3, selectInput(ns("splom_colour"), "Colour by",
+              column(3, selectInput(ns("splom_vars"), "Variables",
+                                    choices = c("All factors + blocks + covariates" = "all",
+                                                "Factors only" = "factors",
+                                                "Covariates only" = "covariates",
+                                                "Blocks only" = "blocks",
+                                                "Model terms" = "model"))),
+              column(2, selectInput(ns("splom_colour"), "Colour by",
                                     choices = c("None" = "none"))),
-              column(3, sliderInput(ns("splom_jitter"), "Jitter amount",
+              column(2, sliderInput(ns("splom_jitter"), "Jitter amount",
                                     min = 0, max = 0.4, value = 0.05, step = 0.01)),
-              column(3, checkboxInput(ns("splom_fit_line"), "Show fit line", value = TRUE)),
+              column(2, checkboxInput(ns("splom_fit_line"), "Show fit line", value = TRUE)),
               column(3, checkboxInput(ns("splom_show_corr"), "Show correlations (upper)", value = TRUE))
             ),
-            plotOutput(ns("design_splom_gg"), height = "600px")
+            p(class = "text-muted small mb-1",
+              tags$strong("r"), " = Pearson correlation (linear association between numeric variables; ",
+              "-1 to +1, 0 = no linear relationship). ",
+              tags$strong("V"), " = Cram\u00e9r's V (association between categorical variables; ",
+              "0 = independent, 1 = perfectly associated). ",
+              "Shown in upper triangle when 'Show correlations' is enabled."),
+            uiOutput(ns("splom_plot_container"))
           ),
 
           tabPanel("Correlation Map",
             br(),
             fluidRow(
-              column(4,
-                radioButtons(ns("corr_map_terms"), "Terms to include",
-                             choices = c("Model terms" = "model",
-                                         "Model + alias terms" = "alias"),
+              column(5,
+                radioButtons(ns("corr_map_scope"), "Terms",
+                             choices = c("Model formula" = "model",
+                                         "Model + alias" = "alias"),
                              selected = "model", inline = TRUE)
               ),
-              column(4,
-                selectInput(ns("corr_map_formula"), "Formula",
-                            choices = NULL)
-              ),
-              column(4,
+              column(7,
                 p(class = "text-muted small mt-2",
                   "Absolute correlations between coded model matrix columns. ",
                   "Blue = orthogonal (0), Red = fully confounded (1).")
@@ -177,14 +191,24 @@ mod_design_ui <- function(id) {
               column(3, numericInput(ns("power_alpha"), "Significance level (\u03b1)",
                                      value = 0.05, min = 0.001, max = 0.5, step = 0.01)),
               column(3, numericInput(ns("power_max_order"), "Max interaction order",
-                                     value = 2, min = 1, max = 5))
+                                     value = 2, min = 1, max = 5),
+                tags$small(class = "text-muted", "Used only if no model formula specified above"))
             ),
             p(class = "text-muted",
               "Power to detect an effect of size \u03b4 given error SD \u03c3. ",
+              "Terms taken from the model formula above; falls back to combinatorial if empty. ",
               "Based on the non-centrality parameter of the F distribution."),
             DT::dataTableOutput(ns("power_table")),
             br(),
             plotlyOutput(ns("power_curve"), height = "400px")
+          ),
+
+          tabPanel("Design Summary",
+            br(),
+            p(class = "text-muted",
+              "Plain-language summary of what the design can and cannot tell you. ",
+              "Based on the model formula, alias structure, and available degrees of freedom."),
+            uiOutput(ns("design_summary_ui"))
           )
         )
       ),
@@ -237,7 +261,31 @@ mod_design_ui <- function(id) {
                                  class = "btn-primary mt-4",
                                  icon = icon("play")))
         ),
-        DT::dataTableOutput(ns("sim_data_table"))
+        DT::dataTableOutput(ns("sim_data_table")),
+        conditionalPanel(
+          condition = paste0("output['", ns("sim_has_data"), "']"),
+          hr(),
+          fluidRow(
+            column(4,
+              textInput(ns("sim_col_name"), "Column name", value = "Simulated_Y",
+                        placeholder = "e.g. Simulated_Y, Null_Y")
+            ),
+            column(4,
+              actionButton(ns("sim_add_to_data"), "Add to Data",
+                           class = "btn-outline-primary mt-4", icon = icon("plus"))
+            ),
+            column(4,
+              tags$small(class = "text-muted mt-4 d-block",
+                "Use 'Null_Y' for null simulations (all effects = 0)")
+            )
+          ),
+          hr(),
+          h5("Effect Breakdown by Observation"),
+          p(class = "text-muted small",
+            "Shows each term's level, its effect contribution, the deterministic sum, ",
+            "error component, and final simulated value."),
+          DT::dataTableOutput(ns("sim_breakdown_table"))
+        )
       ),
 
       # ── Balance Checks ──
@@ -254,9 +302,9 @@ mod_design_ui <- function(id) {
               p(class = "text-muted small",
                 "Replication counts per factor and treatment combination. ",
                 "Unequal replication reduces power for some comparisons."),
-              uiOutput(ns("balance_replication_tables")),
+              uiOutput(ns("balance_replication_flag")),
               br(),
-              uiOutput(ns("balance_replication_flag"))
+              uiOutput(ns("balance_replication_tables"))
             )
           ),
           column(4,
@@ -269,6 +317,7 @@ mod_design_ui <- function(id) {
             )
           ),
           column(4,
+            uiOutput(ns("balance_cov_panel_ui")),
             wellPanel(
               h5("Carryover Balance"),
               p(class = "text-muted small",
@@ -277,8 +326,7 @@ mod_design_ui <- function(id) {
               uiOutput(ns("balance_carryover_tables"))
             )
           )
-        ),
-        uiOutput(ns("balance_cov_panel_ui"))
+        )
       )
     )
   )
@@ -328,15 +376,98 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
       toggle(ns("add_balance_covariates"))
     })
 
+    # ── Download Design Template (Excel with 3 sheets) ─────────────────
+    output$download_design_template <- downloadHandler(
+      filename = function() {
+        paste0("design_template_", format(Sys.Date(), "%Y%m%d"), ".xlsx")
+      },
+      content = function(file) {
+        req(rv$data)
+        wb <- openxlsx::createWorkbook()
+
+        # Sheet 1: Design data (exclude ._row_id, add empty Response if missing)
+        design_df <- rv$data[, setdiff(names(rv$data), ROW_ID_COL), drop = FALSE]
+        resps <- responses()
+        if (length(resps) == 0) design_df$Response <- NA_real_
+        openxlsx::addWorksheet(wb, "Design")
+        openxlsx::writeData(wb, "Design", design_df)
+
+        # Sheet 2: Roles metadata
+        cols <- setdiff(names(rv$data), ROW_ID_COL)
+        roles_df <- data.frame(
+          Column    = cols,
+          Role      = vapply(cols, function(cn) rv$roles[[cn]] %||% "Ignore", character(1)),
+          Type      = vapply(cols, function(cn) rv$col_types[[cn]] %||%
+                               if (is.numeric(rv$data[[cn]])) "Numeric" else "Factor", character(1)),
+          Transform = vapply(cols, function(cn) rv$transforms[[cn]] %||% "none", character(1)),
+          Coding_Low  = vapply(cols, function(cn) {
+            cv <- rv$coding_values[[cn]]
+            if (!is.null(cv$low)) as.numeric(cv$low) else NA_real_
+          }, numeric(1)),
+          Coding_High = vapply(cols, function(cn) {
+            cv <- rv$coding_values[[cn]]
+            if (!is.null(cv$high)) as.numeric(cv$high) else NA_real_
+          }, numeric(1)),
+          stringsAsFactors = FALSE
+        )
+        openxlsx::addWorksheet(wb, "Roles")
+        openxlsx::writeData(wb, "Roles", roles_df)
+
+        # Sheet 3: Active formulas
+        formulas_df <- data.frame(Label = character(0), Formula = character(0),
+                                   stringsAsFactors = FALSE)
+        if (length(rv$formulas) > 0) {
+          formulas_df <- data.frame(
+            Label   = names(rv$formulas),
+            Formula = unname(unlist(rv$formulas)),
+            stringsAsFactors = FALSE
+          )
+        }
+        # Also include design model formula if set
+        design_f <- input$alias_full_formula %||% ""
+        if (nzchar(design_f) && !design_f %in% formulas_df$Formula) {
+          formulas_df <- rbind(
+            data.frame(Label = "Design Model", Formula = design_f, stringsAsFactors = FALSE),
+            formulas_df
+          )
+        }
+        openxlsx::addWorksheet(wb, "Formulas")
+        openxlsx::writeData(wb, "Formulas", formulas_df)
+
+        # Sheet 4: Design metadata (type, resolution, analysis mode)
+        dm <- rv$design_metadata
+        if (length(dm) > 0) {
+          meta_df <- data.frame(
+            Key   = names(dm),
+            Value = vapply(dm, function(v) {
+              if (is.null(v)) "" else as.character(v)
+            }, character(1)),
+            stringsAsFactors = FALSE
+          )
+        } else {
+          meta_df <- data.frame(
+            Key   = c("analysis_mode"),
+            Value = c(analysis_mode()),
+            stringsAsFactors = FALSE
+          )
+        }
+        openxlsx::addWorksheet(wb, "Metadata")
+        openxlsx::writeData(wb, "Metadata", meta_df)
+
+        openxlsx::saveWorkbook(wb, file, overwrite = TRUE)
+      }
+    )
+
     # ── Populate design selectors when data/roles change ───────────────────
     observe({
       facs <- factors_()
       resps <- responses()
       blks  <- blocks()
 
-      # Colour-by choices: None + treatment + factors + blocks + responses
+      # Colour-by choices: None + treatment (comparative only) + factors + blocks + responses
+      mode <- analysis_mode()
       colour_choices <- c("None" = "none")
-      if (length(facs) > 1) {
+      if (mode == "comparative" && length(facs) > 1) {
         trt_lab <- treatment_label()
         colour_choices <- c(colour_choices, setNames(".treatment", trt_lab))
       }
@@ -344,9 +475,9 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
       for (b in blks) colour_choices <- c(colour_choices, setNames(b, paste0(b, " (block)")))
       for (r in resps) colour_choices <- c(colour_choices, setNames(r, paste0(r, " (response)")))
 
-      # Shape-by: treatment + factors + blocks only (categorical)
+      # Shape-by: treatment (comparative only) + factors + blocks only (categorical)
       shape_choices <- c("None" = "none")
-      if (length(facs) > 1) {
+      if (mode == "comparative" && length(facs) > 1) {
         trt_lab <- treatment_label()
         shape_choices <- c(shape_choices, setNames(".treatment", trt_lab))
       }
@@ -363,9 +494,9 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
       }
       axis_choices <- unique(axis_choices)
 
-      # Facet choices: treatment + factors + blocks
+      # Facet choices: treatment (comparative only) + factors + blocks
       facet_choices <- c("None" = "none")
-      if (length(facs) > 1) {
+      if (mode == "comparative" && length(facs) > 1) {
         facet_choices <- c(facet_choices, setNames(".treatment", treatment_label()))
       }
       for (f in facs) facet_choices <- c(facet_choices, setNames(f, f))
@@ -413,18 +544,20 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
         auto_col    <- "none"
         auto_wrap   <- "none"
 
-        # When blocks are on axes, default colour to treatment
+        # When blocks are on axes (e.g. Latin Square), default colour to treatment
+        # and use heatmap mode
         if (length(blks) >= 2) {
           if (length(facs) > 1) {
             auto_colour <- ".treatment"
           } else if (length(facs) == 1) {
             auto_colour <- facs[1]
           }
+          updateRadioButtons(session, "design_2d_mode", selected = "heatmap")
         }
 
         # Assign facets: default to grid mode (row + col), no wrap
-        if (length(facetable) >= 1) auto_col  <- facetable[1]
-        if (length(facetable) >= 2) auto_row  <- facetable[2]
+        if (length(facetable) >= 1 && length(blks) < 2) auto_col  <- facetable[1]
+        if (length(facetable) >= 2 && length(blks) < 2) auto_row  <- facetable[2]
         # 3+ facetable vars: use colour for the third rather than wrap
         if (auto_colour == "none") {
           used <- c(auto_x, auto_y, auto_row, auto_col)
@@ -498,8 +631,66 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
         if (length(num_cols) > 0) dt <- DT::formatRound(dt, num_cols, digits = 3)
         dt
 
+      } else if (mode == "effects") {
+        # Effects mode: one column per degree of freedom via model.matrix()
+        full_str  <- input$alias_full_formula %||% ""
+        if (nchar(trimws(full_str)) == 0)
+          return(DT::datatable(data.frame(Message = "Enter a model formula in the Design Model panel above.")))
+
+        df <- rv$data
+        # Build a working data frame with coded numerics and factors
+        work_df <- df
+        for (cn in names(work_df)) {
+          if (cn == ROW_ID_COL) next
+          if (is.numeric(work_df[[cn]])) {
+            tr <- rv$transforms[[cn]]
+            if (!is.null(tr) && tr == "centre") {
+              work_df[[cn]] <- work_df[[cn]] - mean(work_df[[cn]], na.rm = TRUE)
+            } else if (!is.null(tr) && tr == "coding") {
+              cv <- rv$coding_values[[cn]]
+              if (!is.null(cv) && !is.null(cv$low) && !is.null(cv$high) && cv$high != cv$low) {
+                work_df[[cn]] <- (work_df[[cn]] - (cv$high + cv$low) / 2) / ((cv$high - cv$low) / 2)
+              }
+            }
+          } else {
+            work_df[[cn]] <- as.factor(work_df[[cn]])
+          }
+        }
+
+        # Set sum-to-zero contrasts for all factors
+        resp <- models_exports$get_active_response() %||% "Y"
+        fml_str <- paste(resp, "~", full_str)
+        fml <- tryCatch(as.formula(fml_str), error = function(e) NULL)
+        if (is.null(fml))
+          return(DT::datatable(data.frame(Message = "Could not parse formula.")))
+
+        old_contrasts <- options("contrasts")
+        on.exit(options(old_contrasts), add = TRUE)
+        fac_cols <- names(work_df)[sapply(work_df, is.factor)]
+        clist <- setNames(lapply(fac_cols, function(x) "contr.sum"), fac_cols)
+
+        mm <- tryCatch(
+          model.matrix(fml, data = work_df, contrasts.arg = clist),
+          error = function(e) NULL
+        )
+        if (is.null(mm))
+          return(DT::datatable(data.frame(Message = "Could not build model matrix. Check formula terms.")))
+
+        result <- as.data.frame(mm)
+        # Remove intercept column
+        if ("(Intercept)" %in% names(result)) result[["(Intercept)"]] <- NULL
+
+        if (ncol(result) == 0)
+          return(DT::datatable(data.frame(Message = "No terms in model matrix.")))
+
+        dt <- dt_table(result, rownames = TRUE,
+                       options = list(pageLength = 30, scrollX = TRUE))
+        num_cols <- names(result)[sapply(result, is.numeric)]
+        if (length(num_cols) > 0) dt <- DT::formatRound(dt, num_cols, digits = 3)
+        dt
+
       } else {
-        # Model or Alias mode: build expanded model matrix
+        # Model or Alias mode: build expanded model matrix (one col per term)
         full_str  <- input$alias_full_formula %||% ""
         check_str <- input$alias_check_formula %||% ""
 
@@ -512,7 +703,6 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
         if (mode == "alias" && nchar(trimws(check_str)) > 0) {
           check_terms <- trimws(strsplit(check_str, "\\+")[[1]])
           check_terms <- check_terms[nchar(check_terms) > 0]
-          # Alias = model formula terms + any additional terms from alias formula
           all_terms <- unique(c(model_terms, check_terms))
         } else {
           all_terms <- model_terms
@@ -520,7 +710,6 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
 
         # Build a numeric design matrix for each term
         df <- rv$data
-        # Apply coding transforms
         coded_df <- df
         for (cn in names(rv$transforms)) {
           if (!cn %in% names(coded_df) || !is.numeric(coded_df[[cn]])) next
@@ -536,7 +725,6 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
           }
         }
 
-        # For categorical columns, convert to numeric for centering
         for (cn in names(coded_df)) {
           if (!is.numeric(coded_df[[cn]])) {
             coded_df[[cn]] <- as.numeric(as.factor(coded_df[[cn]]))
@@ -571,10 +759,8 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
           }
         }
 
-        # Flag which terms are model vs alias-only
         if (mode == "alias" && nchar(trimws(check_str)) > 0) {
           alias_only <- setdiff(all_terms, model_terms)
-          # Annotate column names to indicate alias-only
           new_names <- names(result)
           for (i in seq_along(new_names)) {
             if (new_names[i] %in% alias_only)
@@ -596,10 +782,49 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
     })
 
     # ── Scatterplot Matrix ─────────────────────────────────────────────────
+    # Dynamic square container: width = height based on number of variables
+    # Reactive: variables for scatterplot matrix based on selector
+    splom_variables <- reactive({
+      sel <- input$splom_vars %||% "all"
+      if (sel == "factors") {
+        factors_()
+      } else if (sel == "covariates") {
+        covariates()
+      } else if (sel == "blocks") {
+        blocks()
+      } else if (sel == "model") {
+        full_str <- input$alias_full_formula %||% ""
+        if (nchar(trimws(full_str)) == 0) return(character(0))
+        terms <- trimws(strsplit(full_str, "\\+")[[1]])
+        # Extract base variable names from terms (split interactions)
+        vars <- unique(unlist(lapply(terms, function(t) {
+          # Handle I(x^2) → x
+          if (grepl("^I\\(", t)) {
+            inner <- gsub("^I\\((.+)\\)$", "\\1", t)
+            return(trimws(strsplit(inner, "\\^")[[1]][1]))
+          }
+          strsplit(t, ":")[[1]]
+        })))
+        intersect(vars, names(rv$data))
+      } else {
+        # "all" — factors + blocks + covariates
+        c(factors_(), blocks(), covariates())
+      }
+    })
+
+    output$splom_plot_container <- renderUI({
+      n_vars <- length(splom_variables())
+      if (n_vars < 2) return(p(class = "text-muted", "Need at least 2 variables for a scatterplot matrix."))
+      dim <- max(400L, min(900L, n_vars * 150L))
+      dim_px <- paste0(dim, "px")
+      div(style = paste0("width:", dim_px, "; margin: 0 auto;"),
+        plotOutput(ns("design_splom_gg"), height = dim_px, width = dim_px)
+      )
+    })
+
     output$design_splom_gg <- renderPlot({
       req(rv$data)
-      # Include factors, blocks, and covariates
-      facs <- c(factors_(), blocks(), covariates())
+      facs <- splom_variables()
       req(length(facs) >= 2)
       df   <- rv$data
       # Add .treatment column if needed
@@ -727,35 +952,38 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
     }, res = 96)
 
     # ── Design Correlation Map (JMP-style) ─────────────────────────────────
-    # Populate formula selector for the correlation map
-    observe({
-      choices <- rv$formulas
-      if (is.null(choices) || length(choices) == 0) {
-        updateSelectInput(session, "corr_map_formula", choices = character(0))
-        return()
-      }
-      names(choices) <- paste0("Formula ", seq_along(choices))
-      updateSelectInput(session, "corr_map_formula", choices = choices)
-    })
-
     output$design_corr_map <- renderPlot({
-      req(rv$data, input$corr_map_formula)
-      formula_str <- input$corr_map_formula
-      mode <- input$corr_map_terms %||% "model"
+      req(rv$data)
+      scope <- input$corr_map_scope %||% "model"
+      resp <- models_exports$get_active_response() %||% "Y"
 
+      # Build formula from the radio button scope
+      model_str <- trimws(input$alias_full_formula %||% "")
+      alias_str <- trimws(input$alias_check_formula %||% "")
+
+      if (scope == "alias") {
+        # Model + alias: combine both formula inputs
+        parts <- c(model_str, alias_str)
+        parts <- parts[nchar(parts) > 0]
+        terms_str <- paste(parts, collapse = " + ")
+      } else {
+        # Model only: use alias_full_formula
+        terms_str <- model_str
+      }
+      terms_str <- trimws(terms_str)
+      req(nchar(terms_str) > 0)
+
+      formula_str <- paste0(resp, " ~ ", terms_str)
       f <- tryCatch(as.formula(formula_str), error = function(e) NULL)
       req(f)
 
-      resp <- all.vars(f)[1]
       req(resp %in% names(rv$data))
 
       d <- rv$data
 
       # Use orthonormal contrasts for proper design evaluation
-      # contr.helmert normalized to unit columns gives orthonormal coding
       make_orthonormal <- function(k) {
         C <- contr.helmert(k)
-        # Normalize each column to unit length
         apply(C, 2, function(col) col / sqrt(sum(col^2)))
       }
       fac_cols <- names(d)[sapply(d, function(x) is.factor(x) || is.character(x))]
@@ -765,55 +993,21 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
         if (nlev >= 2) contrasts(d[[col]]) <- make_orthonormal(nlev)
       }
 
-      # Build model matrix for model terms
+      # Build model matrix for terms in the selected formula
       model_terms <- attr(terms(f), "term.labels")
       if (length(model_terms) == 0) {
         plot.new(); text(0.5, 0.5, "No model terms to display", cex = 1.2); return()
       }
 
-      mm <- tryCatch({
-        model.matrix(f, data = d)[, -1, drop = FALSE]  # remove intercept
-      }, error = function(e) NULL)
-      if (is.null(mm) || ncol(mm) == 0) {
-        plot.new(); text(0.5, 0.5, "Cannot build model matrix", cex = 1.2); return()
-      }
-
-      # Also centre numeric columns
-      for (j in seq_len(ncol(mm))) {
-        if (length(unique(mm[, j])) > 2 || is.numeric(mm[, j])) {
-          mm[, j] <- mm[, j] - mean(mm[, j], na.rm = TRUE)
-        }
-      }
-
-      # Determine the full set of terms for the correlation map
-      alias_term_labels <- character()
-      use_formula <- f
-      if (mode == "alias") {
-        fac_names <- intersect(all.vars(f)[-1], names(d))
-        alias_terms <- character()
-        if (length(fac_names) >= 2) {
-          combos2 <- combn(fac_names, 2, simplify = FALSE)
-          twofis <- sapply(combos2, paste, collapse = ":")
-          alias_terms <- setdiff(twofis, model_terms)
-        }
-        num_facs <- intersect(fac_names, names(d)[sapply(d, is.numeric)])
-        quads <- paste0("I(", num_facs, "^2)")
-        alias_terms <- c(alias_terms, setdiff(quads, model_terms))
-
-        if (length(alias_terms) > 0) {
-          alias_f <- tryCatch(
-            as.formula(paste(resp, "~", paste(c(model_terms, alias_terms), collapse = " + "))),
-            error = function(e) NULL
-          )
-          if (!is.null(alias_f)) {
-            use_formula <- alias_f
-            alias_term_labels <- alias_terms
-          }
-        }
-      }
+      # Determine model-only terms vs alias terms for separator line
+      full_str <- input$alias_full_formula %||% ""
+      model_only_terms <- if (nchar(trimws(full_str)) > 0) {
+        trimws(strsplit(full_str, "\\+")[[1]])
+      } else model_terms
+      alias_term_labels <- setdiff(model_terms, model_only_terms)
 
       # Build the model and extract the full model matrix + assignment
-      m_full <- tryCatch(model_fit(use_formula, data = d), error = function(e) NULL)
+      m_full <- tryCatch(model_fit(f, data = d), error = function(e) NULL)
       if (is.null(m_full)) {
         plot.new(); text(0.5, 0.5, "Cannot fit model", cex = 1.2); return()
       }
@@ -823,7 +1017,7 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
         mm[, j] <- mm[, j] - mean(mm[, j], na.rm = TRUE)
       }
       assign_vec <- m_full$assign[-1]
-      all_terms <- attr(terms(use_formula), "term.labels")
+      all_terms <- attr(terms(f), "term.labels")
 
       # Compute per-TERM correlation (collapse multi-column factors)
       # For each pair of terms, compute max absolute correlation between their columns
@@ -885,7 +1079,7 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
       }
 
       # Add separator line if alias terms are present
-      if (mode == "alias" && n_model_terms > 0 && n_model_terms < n) {
+      if (length(alias_term_labels) > 0 && n_model_terms > 0 && n_model_terms < n) {
         p <- p +
           geom_hline(yintercept = n - n_model_terms + 0.5, colour = "grey40",
                      linewidth = 0.8, linetype = "dashed") +
@@ -925,9 +1119,14 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
 
       if (mode == "heatmap") {
         # Determine fill variable
+        fill_categorical <- FALSE
         if (has_colour && is.numeric(df[[colour_var]])) {
           fill_var <- colour_var
           fill_label <- colour_var
+        } else if (has_colour && !is.numeric(df[[colour_var]])) {
+          fill_var <- colour_var
+          fill_label <- if (colour_var == ".treatment") treatment_label() else colour_var
+          fill_categorical <- TRUE
         } else {
           fill_var <- NULL
           fill_label <- "Count"
@@ -939,34 +1138,44 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
         df[[x_col]] <- factor(df[[x_col]], levels = x_levels)
         df[[y_col]] <- factor(df[[y_col]], levels = y_levels)
 
-        # Build aggregation groups including facet variables
-        group_cols <- list(x = df[[x_col]], y = df[[y_col]])
-        if (has_wrap) group_cols[[wrap_f]] <- df[[wrap_f]]
-        if (has_row)  group_cols[[row_f]]  <- df[[row_f]]
-        if (has_col)  group_cols[[col_f]]  <- df[[col_f]]
-
-        if (!is.null(fill_var)) {
-          agg <- aggregate(df[[fill_var]], by = group_cols, FUN = mean, na.rm = TRUE)
-          names(agg)[ncol(agg)] <- "value"
+        if (fill_categorical) {
+          # Categorical fill (e.g. treatment): one-row-per-cell, fill by category
+          df[[fill_var]] <- as.factor(df[[fill_var]])
+          p <- ggplot(df, aes_string(x = x_col, y = y_col, fill = fill_var)) +
+            geom_tile(colour = "white", linewidth = 0.5) +
+            cat_scale_fill()(name = fill_label) +
+            labs(title = paste0("Design Heatmap (", fill_label, ")"),
+                 x = x_col, y = y_col)
+          if (isTRUE(input$design_2d_show_values)) {
+            p <- p + geom_text(aes_string(label = fill_var), size = 3)
+          }
+          p <- apply_facets(p, row_var = row_f, col_var = col_f, wrap_var = wrap_f)
         } else {
-          agg <- aggregate(rep(1, nrow(df)), by = group_cols, FUN = sum)
-          names(agg)[ncol(agg)] <- "value"
+          # Numeric or count fill
+          group_cols <- list(x = df[[x_col]], y = df[[y_col]])
+          if (has_wrap) group_cols[[wrap_f]] <- df[[wrap_f]]
+          if (has_row)  group_cols[[row_f]]  <- df[[row_f]]
+          if (has_col)  group_cols[[col_f]]  <- df[[col_f]]
+
+          if (!is.null(fill_var)) {
+            agg <- aggregate(df[[fill_var]], by = group_cols, FUN = mean, na.rm = TRUE)
+            names(agg)[ncol(agg)] <- "value"
+          } else {
+            agg <- aggregate(rep(1, nrow(df)), by = group_cols, FUN = sum)
+            names(agg)[ncol(agg)] <- "value"
+          }
+          names(agg)[1:2] <- c("x", "y")
+
+          p <- ggplot(agg, aes(x = x, y = y, fill = value)) +
+            geom_tile(colour = "white", linewidth = 0.5) +
+            cont_scale_fill()(name = fill_label) +
+            labs(title = paste0("Design Heatmap (", fill_label, ")"),
+                 x = x_col, y = y_col)
+          if (isTRUE(input$design_2d_show_values)) {
+            p <- p + geom_text(aes(label = round(value, 2)), size = 3)
+          }
+          p <- apply_facets(p, row_var = row_f, col_var = col_f, wrap_var = wrap_f)
         }
-        names(agg)[1:2] <- c("x", "y")
-
-        p <- ggplot(agg, aes(x = x, y = y, fill = value)) +
-          geom_tile(colour = "white", linewidth = 0.5) +
-          cont_scale_fill()(name = fill_label) +
-          labs(title = paste("Design Heatmap (", fill_label, ")"),
-               x = x_col, y = y_col)
-
-        # Conditional value labels toggle
-        if (isTRUE(input$design_2d_show_values)) {
-          p <- p + geom_text(aes(label = round(value, 2)), size = 3)
-        }
-
-        # Faceting on aggregated data
-        p <- apply_facets(p, row_var = row_f, col_var = col_f, wrap_var = wrap_f)
 
         p <- p + theme_app()
         ggplotly(p)
@@ -985,22 +1194,38 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
         jit_w <- if (!x_numeric) jit else 0
         jit_h <- if (!y_numeric) jit else 0
 
+        # Auto-shape by treatment in comparative mode
+        amode <- analysis_mode()
+        shape_trt <- (amode == "comparative" && !is.null(trt) && length(unique(trt)) <= 20)
+        if (shape_trt) df$.treatment <- as.factor(trt)
+
         if (has_colour) {
           if (!is.numeric(df[[colour_var]])) df[[colour_var]] <- as.factor(df[[colour_var]])
-          p <- ggplot(df, aes_string(x = x_col, y = y_col, colour = colour_var)) +
-            geom_jitter(width = jit_w, height = jit_h, alpha = 0.7, size = 2.5)
+          if (shape_trt) {
+            p <- ggplot(df, aes_string(x = x_col, y = y_col, colour = colour_var, shape = ".treatment")) +
+              geom_jitter(width = jit_w, height = jit_h, alpha = 0.7, size = 2.5)
+          } else {
+            p <- ggplot(df, aes_string(x = x_col, y = y_col, colour = colour_var)) +
+              geom_jitter(width = jit_w, height = jit_h, alpha = 0.7, size = 2.5)
+          }
           if (is.numeric(df[[colour_var]]))
             p <- p + cont_scale_colour()()
           else
             p <- p + cat_scale_colour()()
         } else {
           pal <- cat_palette()
-          p <- ggplot(df, aes_string(x = x_col, y = y_col)) +
-            geom_jitter(width = jit_w, height = jit_h, alpha = 0.7, size = 2.5, colour = pal(1)[1])
+          if (shape_trt) {
+            p <- ggplot(df, aes_string(x = x_col, y = y_col, shape = ".treatment")) +
+              geom_jitter(width = jit_w, height = jit_h, alpha = 0.7, size = 2.5, colour = pal(1)[1])
+          } else {
+            p <- ggplot(df, aes_string(x = x_col, y = y_col)) +
+              geom_jitter(width = jit_w, height = jit_h, alpha = 0.7, size = 2.5, colour = pal(1)[1])
+          }
         }
         # Rename .treatment legend to dynamic label
         colour_label <- if (!is.null(colour_var) && colour_var == ".treatment") treatment_label() else colour_var
-        p <- p + labs(title = "2D Design Map", x = x_col, y = y_col, colour = colour_label)
+        shape_label <- if (shape_trt) treatment_label() else NULL
+        p <- p + labs(title = "2D Design Map", x = x_col, y = y_col, colour = colour_label, shape = shape_label)
 
         # Faceting on original data
         p <- apply_facets(p, row_var = row_f, col_var = col_f, wrap_var = wrap_f)
@@ -1014,114 +1239,27 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
     output$design_3d <- renderPlotly({
       req(rv$data, input$design_3d_x, input$design_3d_y, input$design_3d_z)
       df <- rv$data
-      # Add .treatment column if needed
       trt <- treatment()
       if (!is.null(trt)) df$.treatment <- trt
       xc <- input$design_3d_x; yc <- input$design_3d_y; zc <- input$design_3d_z
       req(xc %in% names(df), yc %in% names(df), zc %in% names(df))
 
-      # Convert to numeric positions; track categorical axes for custom tick labels
-      cat_axis <- list(x = FALSE, y = FALSE, z = FALSE)
-      axis_levels <- list(x = NULL, y = NULL, z = NULL)
-
-      to_numeric <- function(vals, axis_key) {
-        if (is.numeric(vals)) return(vals)
-        fv <- as.factor(vals)
-        cat_axis[[axis_key]] <<- TRUE
-        axis_levels[[axis_key]] <<- levels(fv)
-        as.numeric(fv)
-      }
-      x_vals <- to_numeric(df[[xc]], "x")
-      y_vals <- to_numeric(df[[yc]], "y")
-      z_vals <- to_numeric(df[[zc]], "z")
-
-      # Add jitter for discrete-looking columns
-      jit <- 0.08
-      if (length(unique(x_vals)) <= 10) x_vals <- x_vals + runif(length(x_vals), -jit, jit)
-      if (length(unique(y_vals)) <= 10) y_vals <- y_vals + runif(length(y_vals), -jit, jit)
-      if (length(unique(z_vals)) <= 10) z_vals <- z_vals + runif(length(z_vals), -jit, jit)
-
-      hover_text <- paste0(xc, " = ", df[[xc]], "\n",
-                           yc, " = ", df[[yc]], "\n",
-                           zc, " = ", df[[zc]])
-
       colour_var <- input$design_3d_colour
       shape_var  <- input$design_3d_shape
-
       has_colour <- !is.null(colour_var) && colour_var != "none" && colour_var %in% names(df)
-      has_shape  <- !is.null(shape_var) && shape_var != "none" && shape_var %in% names(df)
-
-      # Pre-compute shape symbols if shape variable is active
-      shape_symbols <- NULL
-      if (has_shape) {
-        sym_map <- c("circle", "square", "diamond", "cross", "x",
-                     "triangle-up", "triangle-down", "star")
-        sv <- as.factor(df[[shape_var]])
-        shape_symbols <- sym_map[((as.integer(sv) - 1L) %% length(sym_map)) + 1L]
-      }
-
-      mk_base <- list(size = 5)
-      if (!is.null(shape_symbols)) mk_base$symbol <- shape_symbols
-
-      # Dynamic legend labels for .treatment
       colour_label <- if (has_colour && colour_var == ".treatment") treatment_label() else colour_var
-      shape_label  <- if (has_shape && shape_var == ".treatment") treatment_label() else shape_var
 
-      if (has_colour && is.numeric(df[[colour_var]])) {
-        mk <- c(mk_base, list(color = df[[colour_var]], colorscale = "Viridis",
-                               showscale = TRUE,
-                               colorbar = list(title = colour_label)))
-        p <- plot_ly(x = x_vals, y = y_vals, z = z_vals,
-                     type = "scatter3d", mode = "markers",
-                     marker = mk, text = hover_text, hoverinfo = "text")
-      } else if (has_colour) {
-        # For categorical colour with shape, build traces per group
-        if (has_shape) {
-          cv <- as.factor(df[[colour_var]])
-          pal <- cat_palette()(length(levels(cv)))
-          p <- plot_ly()
-          for (gi in seq_along(levels(cv))) {
-            g <- levels(cv)[gi]
-            idx <- which(cv == g)
-            p <- add_trace(p, x = x_vals[idx], y = y_vals[idx], z = z_vals[idx],
-                           type = "scatter3d", mode = "markers",
-                           marker = list(size = 5, color = pal[gi],
-                                         symbol = shape_symbols[idx]),
-                           text = hover_text[idx], hoverinfo = "text",
-                           name = g)
-          }
-        } else {
-          cv <- as.factor(df[[colour_var]])
-          pal <- cat_palette()(length(levels(cv)))
-          p <- plot_ly(x = x_vals, y = y_vals, z = z_vals,
-                       color = cv, colors = pal,
-                       type = "scatter3d", mode = "markers",
-                       marker = mk_base,
-                       text = hover_text, hoverinfo = "text")
-        }
-      } else {
-        mk <- c(mk_base, list(color = default_col()))
-        p <- plot_ly(x = x_vals, y = y_vals, z = z_vals,
-                     type = "scatter3d", mode = "markers",
-                     marker = mk, text = hover_text, hoverinfo = "text")
-      }
+      n_colours <- if (has_colour && !is.numeric(df[[colour_var]])) {
+        length(levels(as.factor(df[[colour_var]])))
+      } else 8
 
-      # Build axis specs with custom tick labels for categorical axes
-      make_axis <- function(title, axis_key) {
-        ax <- list(title = title)
-        if (cat_axis[[axis_key]]) {
-          lvls <- axis_levels[[axis_key]]
-          ax$tickvals <- seq_along(lvls)
-          ax$ticktext <- lvls
-          ax$tickmode <- "array"
-        }
-        ax
-      }
-      p %>% layout(
-        title = "3D Design Space",
-        scene = list(xaxis = make_axis(xc, "x"),
-                     yaxis = make_axis(yc, "y"),
-                     zaxis = make_axis(zc, "z")))
+      plot_3d_scatter(df, xc, yc, zc,
+                      colour_col = colour_var, shape_col = shape_var,
+                      cat_pal = cat_palette()(n_colours),
+                      dcol = default_col(),
+                      cont_cs = tryCatch(cont_plotly_cs(), error = function(e) NULL),
+                      colour_label = colour_label,
+                      title = "3D Design Space")
     })
 
     # ── Formula Term Chooser Buttons ───────────────────────────────────────
@@ -1467,14 +1605,28 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
     })
 
     # ── Power Analysis ─────────────────────────────────────────────────────
+    # Extract model terms from formula (shared helper for power analysis)
+    power_model_terms <- reactive({
+      full_str <- input$alias_full_formula %||% ""
+      if (nchar(trimws(full_str)) > 0) {
+        terms <- trimws(strsplit(full_str, "\\+")[[1]])
+        terms[nchar(terms) > 0]
+      } else {
+        NULL  # fallback to combinatorial generation
+      }
+    })
+
     output$power_table <- DT::renderDataTable({
-      req(rv$data, length(factors_()) > 0)
+      req(rv$data)
+      mt <- power_model_terms()
+      req(length(mt) > 0 || length(factors_()) > 0)
       sigma     <- input$power_sigma     %||% 1
       delta     <- input$power_delta     %||% 1
       alpha     <- input$power_alpha     %||% 0.05
       max_order <- input$power_max_order %||% 2
-      result <- design_power(rv$data, factors_(), sigma, delta, alpha, max_order)
-      if (nrow(result) == 0)
+      result <- design_power(rv$data, factors_(), sigma, delta, alpha, max_order,
+                              model_terms = mt)
+      if (is.null(result) || nrow(result) == 0)
         return(DT::datatable(data.frame(Message = "No terms computed.")))
       dt <- dt_table(result, rownames = FALSE,
                       options = list(pageLength = 30), dom = "Bt")
@@ -1491,7 +1643,9 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
 
     # Power Curve: power vs effect size for each term
     output$power_curve <- renderPlotly({
-      req(rv$data, length(factors_()) > 0)
+      req(rv$data)
+      mt <- power_model_terms()
+      req(length(mt) > 0 || length(factors_()) > 0)
       sigma     <- input$power_sigma     %||% 1
       alpha     <- input$power_alpha     %||% 0.05
       max_order <- input$power_max_order %||% 2
@@ -1499,8 +1653,9 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
 
       deltas <- seq(0.1, sigma * 4, length.out = 25)
       curves <- lapply(deltas, function(d) {
-        pw <- design_power(rv$data, factors_(), sigma, d, alpha, max_order)
-        if (nrow(pw) > 0 && "Power" %in% names(pw)) pw$delta <- d
+        pw <- design_power(rv$data, factors_(), sigma, d, alpha, max_order,
+                            model_terms = mt)
+        if (!is.null(pw) && nrow(pw) > 0 && "Power" %in% names(pw)) pw$delta <- d
         pw
       })
       curves_df <- bind_rows(curves)
@@ -1526,7 +1681,56 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
       ggplotly(p)
     })
 
+    # ── Design Summary ────────────────────────────────────────────────────
+    output$design_summary_ui <- renderUI({
+      req(rv$data)
+      full_str  <- input$alias_full_formula %||% ""
+      check_str <- input$alias_check_formula %||% ""
+      threshold <- input$alias_threshold %||% 0.99
+
+      if (nchar(trimws(full_str)) == 0)
+        return(p(class = "text-muted", "Enter a model formula above to see the design summary."))
+
+      full_terms  <- trimws(strsplit(full_str, "\\+")[[1]])
+      full_terms  <- full_terms[nchar(full_terms) > 0]
+      check_terms <- if (nchar(trimws(check_str)) > 0)
+                       trimws(strsplit(check_str, "\\+")[[1]]) else NULL
+
+      summary <- tryCatch(
+        design_summary(rv$data, full_terms, check_terms, threshold, rv$col_types),
+        error = function(e) list(error = list(
+          title = "Error", level = "red",
+          items = list(paste0("Could not compute design summary: ", e$message)))))
+
+      level_icon <- function(lvl) {
+        switch(lvl,
+          green = icon("check-circle", class = "text-success"),
+          amber = icon("exclamation-triangle", class = "text-warning"),
+          red   = icon("times-circle", class = "text-danger"),
+          icon("question-circle"))
+      }
+      level_bg <- function(lvl) {
+        switch(lvl,
+          green = "border-left: 4px solid #28a745; padding-left: 12px;",
+          amber = "border-left: 4px solid #ffc107; padding-left: 12px;",
+          red   = "border-left: 4px solid #dc3545; padding-left: 12px;",
+          "padding-left: 12px;")
+      }
+
+      panels <- lapply(summary, function(sec) {
+        tags$div(style = paste0(level_bg(sec$level), " margin-bottom: 16px;"),
+          h6(level_icon(sec$level), sec$title),
+          tags$ul(lapply(sec$items, function(item) tags$li(item)))
+        )
+      })
+
+      tagList(panels)
+    })
+
     # ── Simulation ─────────────────────────────────────────────────────────
+
+    # Track previous model effects keyed by term name
+    rv_sim <- reactiveValues(model_effects = list(), alias_effects = list())
 
     # Dynamic UI: model term effect inputs
     output$sim_model_effects_ui <- renderUI({
@@ -1539,13 +1743,30 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
       if (length(model_terms) == 0)
         return(p(class = "text-muted", "No valid terms in model formula."))
 
+      # Build labels matching coefficient style: "Factor [Level]" for factors
+      coef_labels <- sim_term_labels(model_terms, rv$data)
+
+      # Preserve existing effect values by term name
+      saved <- isolate(rv_sim$model_effects)
       rows <- split(seq_along(model_terms), ceiling(seq_along(model_terms) / 3))
       tagList(lapply(rows, function(indices) {
         fluidRow(lapply(indices, function(i) {
-          column(4, numericInput(ns(paste0("sim_eff_", i)), model_terms[i],
-                                 value = 0, step = 0.5))
+          prev_val <- saved[[model_terms[i]]] %||% 0
+          column(4, numericInput(ns(paste0("sim_eff_", i)), coef_labels[i],
+                                 value = prev_val, step = 0.5))
         }))
       }))
+    })
+
+    # Save model effects when they change
+    observe({
+      full_str <- input$alias_full_formula %||% ""
+      model_terms <- trimws(strsplit(full_str, "\\+")[[1]])
+      model_terms <- model_terms[nchar(model_terms) > 0]
+      for (i in seq_along(model_terms)) {
+        val <- input[[paste0("sim_eff_", i)]]
+        if (!is.null(val)) rv_sim$model_effects[[model_terms[i]]] <- val
+      }
     })
 
     # Dynamic UI: alias term effect inputs
@@ -1562,13 +1783,30 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
       if (length(alias_only) == 0)
         return(p(class = "text-muted", "No additional alias terms."))
 
+      coef_labels <- sim_term_labels(alias_only, rv$data)
+      saved <- isolate(rv_sim$alias_effects)
       rows <- split(seq_along(alias_only), ceiling(seq_along(alias_only) / 3))
       tagList(lapply(rows, function(indices) {
         fluidRow(lapply(indices, function(i) {
-          column(4, numericInput(ns(paste0("sim_ali_", i)), alias_only[i],
-                                 value = 0, step = 0.5))
+          prev_val <- saved[[alias_only[i]]] %||% 0
+          column(4, numericInput(ns(paste0("sim_ali_", i)), coef_labels[i],
+                                 value = prev_val, step = 0.5))
         }))
       }))
+    })
+
+    # Save alias effects when they change
+    observe({
+      full_str <- input$alias_full_formula %||% ""
+      check_str <- input$alias_check_formula %||% ""
+      model_terms <- trimws(strsplit(full_str, "\\+")[[1]])
+      check_terms <- trimws(strsplit(check_str, "\\+")[[1]])
+      alias_only <- setdiff(check_terms, model_terms)
+      alias_only <- alias_only[nchar(alias_only) > 0]
+      for (i in seq_along(alias_only)) {
+        val <- input[[paste0("sim_ali_", i)]]
+        if (!is.null(val)) rv_sim$alias_effects[[alias_only[i]]] <- val
+      }
     })
 
     # Real effects table (updates reactively as inputs change)
@@ -1609,18 +1847,43 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
 
       result <- compute_real_effects(alias_info, model_effects, alias_effects)
 
-      # Add Confounded_With column showing alias structure regardless of effect sizes
+      # Add Confounded_With column: alias confounding (out-of-model terms)
       A <- alias_info$A
+      alias_conf <- rep("", nrow(result))
       if (length(alias_info$alias_terms) > 0 && ncol(A) > 0) {
-        result$Confounded_With <- sapply(seq_len(nrow(A)), function(i) {
+        alias_conf <- sapply(seq_len(nrow(A)), function(i) {
           nonzero <- which(abs(A[i, ]) > 0.1)
           if (length(nonzero) == 0) return("")
           paste(paste0(alias_info$alias_terms[nonzero], "(", round(A[i, nonzero], 2), ")"),
                 collapse = ", ")
         })
-      } else {
-        result$Confounded_With <- ""
       }
+
+      # Within-model collinearity
+      within_aliases <- tryCatch(
+        compute_aliases(rv$data, model_terms, model_terms, threshold = 0.3),
+        error = function(e) NULL
+      )
+      within_conf <- rep("", nrow(result))
+      if (!is.null(within_aliases) && "Term_1" %in% names(within_aliases) && nrow(within_aliases) > 0) {
+        within_conf <- sapply(result$Term, function(t) {
+          rows <- within_aliases[within_aliases$Term_1 == t | within_aliases$Term_2 == t, , drop = FALSE]
+          if (nrow(rows) == 0) return("")
+          descs <- sapply(seq_len(nrow(rows)), function(i) {
+            other <- if (rows$Term_1[i] == t) rows$Term_2[i] else rows$Term_1[i]
+            paste0(other, " (r=", rows$Correlation[i], ")")
+          })
+          paste(descs, collapse = ", ")
+        })
+      }
+
+      # Merge into a single Confounded_With column
+      result$Confounded_With <- sapply(seq_len(nrow(result)), function(i) {
+        parts <- character()
+        if (nchar(within_conf[i]) > 0) parts <- c(parts, paste0("[model] ", within_conf[i]))
+        if (nchar(alias_conf[i]) > 0)  parts <- c(parts, paste0("[alias] ", alias_conf[i]))
+        paste(parts, collapse = "; ")
+      })
 
       # Add simulated OLS estimate if simulation data exists
       # Uses same centred design matrix (X_model) that generated the data
@@ -1728,6 +1991,132 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
         DT::formatRound("Simulated_Y", digits = 4)
     })
 
+    # Flag for conditionalPanel: does simulated data exist?
+    output$sim_has_data <- reactive({ !is.null(rv$sim_data) })
+    outputOptions(output, "sim_has_data", suspendWhenHidden = FALSE)
+
+    # Effect breakdown table: per-observation per-term decomposition
+    output$sim_breakdown_table <- DT::renderDataTable({
+      req(rv$data, rv$sim_data)
+      full_str <- input$alias_full_formula %||% ""
+      check_str <- input$alias_check_formula %||% ""
+      req(nchar(trimws(full_str)) > 0)
+
+      model_terms <- trimws(strsplit(full_str, "\\+")[[1]])
+      model_terms <- model_terms[nchar(model_terms) > 0]
+      check_terms <- if (nchar(trimws(check_str)) > 0)
+                       trimws(strsplit(check_str, "\\+")[[1]]) else character(0)
+
+      alias_info <- compute_alias_matrix(rv$data, model_terms,
+                      if (length(check_terms) > 0) check_terms else model_terms)
+      req(alias_info)
+
+      # Gather model effects
+      model_effects <- list()
+      for (i in seq_along(model_terms)) {
+        val <- input[[paste0("sim_eff_", i)]]
+        model_effects[[model_terms[i]]] <- if (!is.null(val)) val else 0
+      }
+
+      # Gather alias effects
+      alias_only <- setdiff(check_terms, model_terms)
+      include_alias <- isTRUE(input$sim_include_alias)
+      alias_effects <- list()
+      if (length(alias_only) > 0) {
+        for (i in seq_along(alias_only)) {
+          val <- input[[paste0("sim_ali_", i)]]
+          alias_effects[[alias_only[i]]] <- if (!is.null(val)) val else 0
+        }
+      }
+
+      n <- nrow(rv$data)
+      Xm <- alias_info$X_model
+      beta <- sapply(alias_info$model_terms, function(t) model_effects[[t]] %||% 0)
+      grand_mean <- input$sim_grand_mean %||% 50
+
+      # Build breakdown data.frame
+      bd <- data.frame(Obs = seq_len(n))
+
+      # For each model term: show level and effect contribution
+      for (j in seq_along(alias_info$model_terms)) {
+        t <- alias_info$model_terms[j]
+        # Raw level from original data
+        raw_parts <- strsplit(t, ":")[[1]]
+        if (all(raw_parts %in% names(rv$data))) {
+          if (length(raw_parts) == 1) {
+            bd[[paste0(t, "_Level")]] <- as.character(rv$data[[t]])
+          } else {
+            bd[[paste0(t, "_Level")]] <- apply(rv$data[, raw_parts, drop = FALSE], 1,
+                                               function(r) paste(r, collapse = ":"))
+          }
+        } else if (grepl("^I\\(", t)) {
+          # Polynomial: show the base variable value
+          inner <- gsub("^I\\((.+)\\)$", "\\1", t)
+          base_var <- trimws(strsplit(inner, "\\^")[[1]][1])
+          if (base_var %in% names(rv$data))
+            bd[[paste0(t, "_Level")]] <- as.character(rv$data[[base_var]])
+        }
+        # Effect contribution: X_col * beta
+        bd[[paste0(t, "_Effect")]] <- round(Xm[, j] * beta[j], 4)
+      }
+
+      # Alias term contributions (if included)
+      if (include_alias && length(alias_info$alias_terms) > 0 && ncol(alias_info$X_alias) > 0) {
+        Xa <- alias_info$X_alias
+        gamma <- sapply(alias_info$alias_terms, function(t) alias_effects[[t]] %||% 0)
+        for (j in seq_along(alias_info$alias_terms)) {
+          t <- alias_info$alias_terms[j]
+          raw_parts <- strsplit(t, ":")[[1]]
+          if (all(raw_parts %in% names(rv$data))) {
+            if (length(raw_parts) == 1) {
+              bd[[paste0(t, "_Level")]] <- as.character(rv$data[[t]])
+            } else {
+              bd[[paste0(t, "_Level")]] <- apply(rv$data[, raw_parts, drop = FALSE], 1,
+                                                 function(r) paste(r, collapse = ":"))
+            }
+          }
+          bd[[paste0(t, "_Effect")]] <- round(Xa[, j] * gamma[j], 4)
+        }
+      }
+
+      # Deterministic sum
+      deterministic <- grand_mean + as.numeric(Xm %*% beta)
+      if (include_alias && length(alias_info$alias_terms) > 0 && ncol(alias_info$X_alias) > 0) {
+        gamma <- sapply(alias_info$alias_terms, function(t) alias_effects[[t]] %||% 0)
+        deterministic <- deterministic + as.numeric(alias_info$X_alias %*% gamma)
+      }
+
+      bd$Grand_Mean <- grand_mean
+      bd$Sum_Effects <- round(deterministic, 4)
+      bd$Error <- round(rv$sim_data - deterministic, 4)
+      bd$Simulated_Y <- round(rv$sim_data, 4)
+
+      # Identify effect columns for formatting
+      eff_cols <- grep("_Effect$", names(bd), value = TRUE)
+      num_cols <- c(eff_cols, "Grand_Mean", "Sum_Effects", "Error", "Simulated_Y")
+
+      dt <- dt_table(bd, rownames = FALSE,
+                     options = list(pageLength = 20, scrollX = TRUE))
+      if (length(num_cols) > 0)
+        dt <- DT::formatRound(dt, intersect(num_cols, names(bd)), digits = 4)
+      dt
+    })
+
+    # Add simulated response to rv$data for modelling
+    observeEvent(input$sim_add_to_data, {
+      if (is_locked(rv, "Add simulated response")) return()
+      req(rv$data, rv$sim_data, length(rv$sim_data) == nrow(rv$data))
+      col_name <- input$sim_col_name %||% "Simulated_Y"
+      col_name <- trimws(col_name)
+      if (nchar(col_name) == 0) col_name <- "Simulated_Y"
+      # Make syntactically valid R name
+      col_name <- make.names(col_name)
+      rv$data[[col_name]] <- rv$sim_data
+      showNotification(
+        paste0(col_name, " column added to data. Select it as Response in Assign Roles."),
+        type = "message", duration = 6)
+    })
+
     # ── Balance Checks ─────────────────────────────────────────────────────
 
     # Treatment combination column for balance checks
@@ -1776,9 +2165,12 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
       trt_tab <- as.data.frame(table(Treatment = trt), stringsAsFactors = FALSE)
       names(trt_tab) <- c(trt_lab, "Count")
 
+      # Only show treatment table if comparative mode OR design has replicated treatments
+      show_treatment <- (mode == "comparative") || (length(unique(trt)) < length(trt))
+
       # Build ordered list: comparative = treatment first, regression = factors first
       tables <- list()
-      if (mode == "comparative") {
+      if (mode == "comparative" && show_treatment) {
         tables[[trt_lab]] <- trt_tab
         for (f in facs) {
           tab <- make_factor_table(f, f)
@@ -1789,7 +2181,7 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
           tab <- make_factor_table(f, f)
           if (!is.null(tab)) tables[[f]] <- tab
         }
-        tables[[trt_lab]] <- trt_tab
+        if (show_treatment) tables[[trt_lab]] <- trt_tab
       }
       # Add blocks
       for (b in blks) {
@@ -1871,8 +2263,9 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
       }
 
       trt_lab <- treatment_label()
+      show_treatment <- (mode == "comparative") || (length(unique(trt)) < length(trt))
       tables <- list()
-      if (mode == "comparative") {
+      if (mode == "comparative" && show_treatment) {
         tables[[trt_lab]] <- make_ro_table(trt, trt_lab)
         for (f in facs) {
           if (f %in% names(rv$data)) tables[[f]] <- make_ro_table(rv$data[[f]], f)
@@ -1881,7 +2274,7 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
         for (f in facs) {
           if (f %in% names(rv$data)) tables[[f]] <- make_ro_table(rv$data[[f]], f)
         }
-        tables[[trt_lab]] <- make_ro_table(trt, trt_lab)
+        if (show_treatment) tables[[trt_lab]] <- make_ro_table(trt, trt_lab)
       }
 
       tagList(lapply(names(tables), function(nm) {
@@ -1955,8 +2348,9 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
       }
 
       trt_lab <- treatment_label()
+      show_treatment <- (mode == "comparative") || (length(unique(trt)) < length(trt))
       tables <- list()
-      if (mode == "comparative") {
+      if (mode == "comparative" && show_treatment) {
         tables[[trt_lab]] <- make_carryover(trt, trt_lab)
         for (f in facs) {
           if (f %in% names(rv$data)) tables[[f]] <- make_carryover(rv$data[[f]], f)
@@ -1965,6 +2359,7 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
         for (f in facs) {
           if (f %in% names(rv$data)) tables[[f]] <- make_carryover(rv$data[[f]], f)
         }
+        if (show_treatment) tables[[trt_lab]] <- make_carryover(trt, trt_lab)
       }
 
       tagList(lapply(names(tables), function(nm) {
@@ -2023,25 +2418,15 @@ mod_design_server <- function(id, rv, colour_theme, role_selectors,
       for (f in facs) {
         cov_choices <- c(cov_choices, setNames(paste0("prev_factor_", f), paste0("Previous ", f)))
       }
-      fluidRow(
-        column(12,
-          wellPanel(
-            h5("Add Covariate Columns"),
-            p(class = "text-muted small",
-              "Add lagged columns to the dataset for carryover adjustment in the model."),
-            fluidRow(
-              column(8,
-                checkboxGroupInput(ns("balance_covariates"), "Columns to add",
-                  choices = cov_choices, selected = NULL)
-              ),
-              column(4,
-                actionButton(ns("add_balance_covariates"), "Add to Dataset",
-                             class = "btn-outline-primary mt-3",
-                             icon = icon("plus"))
-              )
-            )
-          )
-        )
+      wellPanel(
+        h5("Add Covariate Columns"),
+        p(class = "text-muted small",
+          "Add lagged columns for carryover adjustment."),
+        checkboxGroupInput(ns("balance_covariates"), "Columns to add",
+          choices = cov_choices, selected = NULL),
+        actionButton(ns("add_balance_covariates"), "Add to Dataset",
+                     class = "btn-outline-primary btn-sm",
+                     icon = icon("plus"))
       )
     })
 

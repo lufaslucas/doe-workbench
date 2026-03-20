@@ -109,6 +109,18 @@ mod_report_server <- function(id, rv, role_selectors, active_models,
         # Term roles for ANOVA ordering
         tr <- classify_anova_terms(all_terms_raw, factors_(), blocks(), all_covariates())
 
+        # Build reproducible code
+        repro_code <- tryCatch({
+          header <- codegen_header()
+          data_setup <- codegen_data_setup(rv)
+          model_code <- vapply(names(active_models()), function(mn) {
+            f <- rv$formulas[rv$formulas == mn]
+            if (length(f) == 0) f <- mn  # formula is the label
+            codegen_anova(f[1])
+          }, character(1))
+          paste(c(header, "", data_setup, "", model_code), collapse = "\n\n")
+        }, error = function(e) "")
+
         params_list <- list(
           raw_data        = head(rv$data, 50),
           roles           = rv$roles,
@@ -122,7 +134,8 @@ mod_report_server <- function(id, rv, role_selectors, active_models,
           mc_results_list = rv$mc_results,
           mc_on           = isTRUE(mc_state$mc_on()),
           mc_terms        = mc_state$mc_terms(),
-          mc_methods      = mc_state$mc_methods()
+          mc_methods      = mc_state$mc_methods(),
+          repro_code      = repro_code
         )
 
         fmt <- switch(input$report_format,

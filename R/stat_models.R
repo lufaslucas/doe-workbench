@@ -6,9 +6,19 @@
 # col_types: named list colname -> "Factor" | "Numeric"
 # ---------------------------------------------------------------------------
 fit_models <- function(formulas_vec, data, col_types = list(),
-                       transforms = list(), coding_values = list()) {
+                       transforms = list(), coding_values = list(),
+                       weight_column = NULL, level_labels = list()) {
   # Drop internal ID column before fitting
   data <- data[, setdiff(names(data), ROW_ID_COL), drop = FALSE]
+
+  # Extract weight vector (before any transforms)
+  w <- NULL
+  if (!is.null(weight_column) && nchar(weight_column) > 0 &&
+      weight_column %in% names(data)) {
+    w <- as.numeric(data[[weight_column]])
+    if (any(is.na(w)) || any(w < 0))
+      warning("Weight column '", weight_column, "' contains NA or negative values.")
+  }
 
   # Coerce columns according to declared types
   for (cn in names(col_types)) {
@@ -20,6 +30,21 @@ fit_models <- function(formulas_vec, data, col_types = list(),
     }
   }
 
+  # Apply level labels to factor columns (cosmetic relabelling)
+  for (cn in names(level_labels)) {
+    if (!cn %in% names(data) || !is.factor(data[[cn]])) next
+    lbl_map <- level_labels[[cn]]
+    if (is.null(lbl_map) || length(lbl_map) == 0) next
+    cur_levs <- levels(data[[cn]])
+    new_levs <- sapply(cur_levs, function(lv) {
+      if (!is.null(lbl_map[[lv]]) && nchar(lbl_map[[lv]]) > 0) lbl_map[[lv]] else lv
+    }, USE.NAMES = FALSE)
+    # Only relabel if any labels actually differ
+    if (!identical(cur_levs, new_levs)) {
+      levels(data[[cn]]) <- new_levs
+    }
+  }
+
   # Apply user-selected transforms to numeric columns
   for (cn in names(transforms)) {
     if (!cn %in% names(data) || !is.numeric(data[[cn]])) next
@@ -27,6 +52,10 @@ fit_models <- function(formulas_vec, data, col_types = list(),
     if (is.null(tr) || tr == "none") next
     if (tr == "centre") {
       data[[cn]] <- data[[cn]] - mean(data[[cn]], na.rm = TRUE)
+    } else if (tr == "centre_scale") {
+      mn <- mean(data[[cn]], na.rm = TRUE)
+      rng <- diff(range(data[[cn]], na.rm = TRUE))
+      if (rng > 0) data[[cn]] <- (data[[cn]] - mn) / (rng / 2)
     } else if (tr == "coding") {
       cv <- coding_values[[cn]]
       if (!is.null(cv)) {
@@ -54,7 +83,7 @@ fit_models <- function(formulas_vec, data, col_types = list(),
       facs_in_formula <- intersect(fac_cols, f_vars)
       ctr <- setNames(rep(list("contr.sum"), length(facs_in_formula)),
                        facs_in_formula)
-      models[[label]] <- model_fit(f, data = data, contrasts = ctr)
+      models[[label]] <- model_fit(f, data = data, contrasts = ctr, weights = w)
     }, error = function(e) {
       errors[[label]] <<- e$message
     })

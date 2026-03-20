@@ -113,6 +113,41 @@ run_mc <- function(model, spec, method = "tukey",
         return(dun_df)
       },
       "custom" = {
+        if (!is.null(selected_pairs) && length(selected_pairs) > 0) {
+          # Compute all pairwise to get the contrast coefficient matrix
+          all_pairs <- emmeans::contrast(em, method = "pairwise", adjust = "none")
+          all_df <- as.data.frame(summary(all_pairs))
+          contrast_col <- if ("contrast" %in% names(all_df)) "contrast" else names(all_df)[1]
+          all_labels <- gsub("\\s+", " ", trimws(all_df[[contrast_col]]))
+          selected_norm <- gsub("\\s+", " ", trimws(selected_pairs))
+          keep_idx <- which(all_labels %in% selected_norm)
+          if (length(keep_idx) > 0) {
+            # Extract contrast coefficient matrix and select subset
+            # coef() returns data.frame: rows=levels, cols=label+contrasts
+            all_coefs <- coef(all_pairs)
+            label_col <- names(all_coefs)[1]
+            coef_mat  <- as.matrix(all_coefs[, -1, drop = FALSE])  # drop label
+            coef_mat_t <- t(coef_mat)  # now rows=contrasts, cols=levels
+            sub_t <- coef_mat_t[keep_idx, , drop = FALSE]
+            # Convert to list of named contrast vectors for emmeans
+            contrast_list <- lapply(seq_len(nrow(sub_t)), function(i) {
+              v <- sub_t[i, ]
+              names(v) <- all_coefs[[label_col]]
+              v
+            })
+            names(contrast_list) <- rownames(sub_t)
+            # Re-run mvt adjustment on just the selected subset
+            sub_pairs <- emmeans::contrast(em, method = contrast_list, adjust = "mvt")
+            sub_df <- as.data.frame(summary(sub_pairs, infer = c(TRUE, TRUE), level = 1 - alpha))
+            # Restore original contrast labels
+            if (nrow(sub_df) > 0 && contrast_col %in% names(sub_df))
+              sub_df[[contrast_col]] <- all_df[[contrast_col]][keep_idx]
+            sub_df$method <- method
+            sub_df$spec   <- spec
+            return(sub_df)
+          }
+        }
+        # Fall through: no selected pairs, compute all pairwise
         emmeans::contrast(em, method = "pairwise", adjust = "mvt")
       },
       {
@@ -122,15 +157,6 @@ run_mc <- function(model, spec, method = "tukey",
 
     # Get results with confidence intervals
     result <- as.data.frame(summary(pairs, infer = c(TRUE, TRUE), level = 1 - alpha))
-
-    # For custom, filter to selected pairs
-    if (tolower(method) == "custom" && !is.null(selected_pairs) && length(selected_pairs) > 0) {
-      contrast_col <- if ("contrast" %in% names(result)) "contrast" else names(result)[1]
-      # Normalize whitespace for matching
-      result_labels <- gsub("\\s+", " ", trimws(result[[contrast_col]]))
-      selected_norm <- gsub("\\s+", " ", trimws(selected_pairs))
-      result <- result[result_labels %in% selected_norm, , drop = FALSE]
-    }
 
     if (nrow(result) == 0) return(data.frame())
     result$method <- method

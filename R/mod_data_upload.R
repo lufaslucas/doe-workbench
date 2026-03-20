@@ -79,34 +79,106 @@ mod_data_upload_server <- function(id, rv, analysis_mode, navigate_to,
 
       if (is.null(df)) return()
       df <- as.data.frame(df, stringsAsFactors = FALSE)
+
+      # ── Design template detection: Excel with "Roles" sheet ──
+      is_template <- FALSE
+      template_roles <- NULL
+      template_formulas <- NULL
+      if (tolower(ext) %in% c("xlsx", "xls")) {
+        sheets <- tryCatch(readxl::excel_sheets(path), error = function(e) character(0))
+        if ("Roles" %in% sheets) {
+          is_template <- TRUE
+          template_roles <- tryCatch(
+            as.data.frame(readxl::read_excel(path, sheet = "Roles"), stringsAsFactors = FALSE),
+            error = function(e) NULL)
+          if ("Formulas" %in% sheets) {
+            template_formulas <- tryCatch(
+              as.data.frame(readxl::read_excel(path, sheet = "Formulas"), stringsAsFactors = FALSE),
+              error = function(e) NULL)
+          }
+          if ("Metadata" %in% sheets) {
+            meta_raw <- tryCatch(
+              as.data.frame(readxl::read_excel(path, sheet = "Metadata"), stringsAsFactors = FALSE),
+              error = function(e) NULL)
+            if (!is.null(meta_raw) && "Key" %in% names(meta_raw) && "Value" %in% names(meta_raw)) {
+              rv$design_metadata <- stats::setNames(
+                as.list(meta_raw$Value), meta_raw$Key
+              )
+              # Auto-set analysis mode from metadata
+              if (!is.null(rv$design_metadata$analysis_mode) &&
+                  rv$design_metadata$analysis_mode %in% c("regression", "comparative")) {
+                set_analysis_mode(rv$design_metadata$analysis_mode)
+              }
+            }
+          }
+        }
+      }
+
       rv$data <- stamp_row_ids(df)
       rv$transforms    <- list()
       rv$coding_values <- list()
+      rv$level_labels  <- list()
       reset_downstream()
 
-      # Auto-suggest roles (with run-order auto-detection)
-      run_order_pattern <- "^run.?order$|^run$|^std.?order$|^exp.?id$|^obs$|^observation$"
-      auto_roles <- sapply(names(df), function(col) {
-        if (grepl(run_order_pattern, col, ignore.case = TRUE)) return("Run Order")
-        if (is.numeric(df[[col]])) "Response" else "Factor"
-      }, USE.NAMES = TRUE)
-      rv$roles <- as.list(auto_roles)
-
-      # Auto-suggest types (regression mode -> factors default to Numeric)
-      mode <- analysis_mode()
-      auto_types <- sapply(names(df), function(col) {
-        if (is.numeric(df[[col]])) {
-          "Numeric"
-        } else if (mode == "regression") {
-          "Numeric"
-        } else {
-          "Factor"
+      if (is_template && !is.null(template_roles) && nrow(template_roles) > 0) {
+        # Restore roles, types, transforms, coding values from template
+        for (i in seq_len(nrow(template_roles))) {
+          cn <- template_roles$Column[i]
+          if (!cn %in% names(df)) next
+          rv$roles[[cn]]     <- template_roles$Role[i]      %||% "Ignore"
+          rv$col_types[[cn]] <- template_roles$Type[i]      %||% "Numeric"
+          rv$transforms[[cn]] <- template_roles$Transform[i] %||% "none"
+          low_val  <- template_roles$Coding_Low[i]
+          high_val <- template_roles$Coding_High[i]
+          if (!is.na(low_val) && !is.na(high_val)) {
+            rv$coding_values[[cn]] <- list(low = low_val, high = high_val)
+          }
         }
-      }, USE.NAMES = TRUE)
-      rv$col_types <- as.list(auto_types)
+        # Assign default role to any new columns not in template
+        for (cn in setdiff(names(df), template_roles$Column)) {
+          rv$roles[[cn]] <- if (is.numeric(df[[cn]])) "Response" else "Factor"
+          rv$col_types[[cn]] <- if (is.numeric(df[[cn]])) "Numeric" else "Factor"
+        }
+        # Restore formulas if available
+        if (!is.null(template_formulas) && nrow(template_formulas) > 0 &&
+            "Formula" %in% names(template_formulas)) {
+          # Set the first non-design formula as custom formula
+          app_formulas <- template_formulas[template_formulas$Label != "Design Model", , drop = FALSE]
+          if (nrow(app_formulas) > 0) {
+            custom_text <- paste(app_formulas$Formula, collapse = "\n")
+            models_exports$set_custom_formula(custom_text)
+            rv$skip_auto_formula <- TRUE
+          }
+        }
+        showNotification(
+          paste0("Design template detected \u2014 roles, transforms, and formulas restored. ",
+                 nrow(df), " rows \u00d7 ", ncol(df), " columns."),
+          type = "message", duration = 6)
+      } else {
+        # Auto-suggest roles (with run-order auto-detection)
+        run_order_pattern <- "^run.?order$|^run$|^std.?order$|^exp.?id$|^obs$|^observation$"
+        auto_roles <- sapply(names(df), function(col) {
+          if (grepl(run_order_pattern, col, ignore.case = TRUE)) return("Run Order")
+          if (is.numeric(df[[col]])) "Response" else "Factor"
+        }, USE.NAMES = TRUE)
+        rv$roles <- as.list(auto_roles)
 
-      showNotification(paste("Loaded", nrow(df), "rows \u00d7", ncol(df), "columns."),
-                       type = "message")
+        # Auto-suggest types (regression mode -> factors default to Numeric)
+        mode <- analysis_mode()
+        auto_types <- sapply(names(df), function(col) {
+          if (is.numeric(df[[col]])) {
+            "Numeric"
+          } else if (mode == "regression") {
+            "Numeric"
+          } else {
+            "Factor"
+          }
+        }, USE.NAMES = TRUE)
+        rv$col_types <- as.list(auto_types)
+
+        showNotification(paste("Loaded", nrow(df), "rows \u00d7", ncol(df), "columns."),
+                         type = "message")
+      }
     })
 
     # ── Data preview table ───────────────────────────────────────────────
@@ -360,6 +432,12 @@ mod_data_upload_server <- function(id, rv, analysis_mode, navigate_to,
           Catalyst = list(low = 2, high = 8),
           Speed = list(low = 100, high = 400)
         )
+        rv$level_labels <- list()
+        rv$design_metadata <- list(
+          design_type = "factorial", resolution = 4,
+          analysis_mode = "regression", generator = "fracfact",
+          model_defaults = list(max_way = 2, poly_degree = 1)
+        )
         showNotification(
           paste0("2\u2074\u207b\u00b9 fractional factorial loaded: 8 runs, ",
                  "Temp / pH / Catalyst / Speed. ",
@@ -459,6 +537,12 @@ mod_data_upload_server <- function(id, rv, analysis_mode, navigate_to,
         rv$coding_values <- list(
           x1 = list(low = -1, high = 1),
           x2 = list(low = -1, high = 1)
+        )
+        rv$level_labels <- list()
+        rv$design_metadata <- list(
+          design_type = "rsm", resolution = NA,
+          analysis_mode = "regression", generator = "ccd",
+          model_defaults = list(max_way = 2, poly_degree = 2)
         )
         showNotification(
           paste0("CCD loaded: 11 runs, 2 factors (x1, x2), face-centred design. ",

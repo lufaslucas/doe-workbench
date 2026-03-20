@@ -74,9 +74,11 @@ results_robustness_server <- function(input, output, session, rv,
     if (is.null(res) || nrow(res$pairwise_audit) == 0)
       return(DT::datatable(data.frame(Message = "Press Run.")))
     d <- res$pairwise_audit
-    dt <- dt_table(d, rownames = FALSE, options = list(pageLength = PAGE_LEN_DEFAULT))
+    d <- format_pvalue_dt(d, "p.value")
+    shadow_idx <- which(names(d) == "._p_p.value") - 1
+    dt <- dt_table(d, rownames = FALSE, options = list(pageLength = PAGE_LEN_DEFAULT,
+                   columnDefs = list(list(visible = FALSE, targets = shadow_idx))))
     dt <- DT::formatRound(dt, "estimate", digits = 3)
-    dt <- DT::formatRound(dt, "p.value", digits = 4)
     dt <- DT::formatStyle(dt, "Is_Final",
             backgroundColor = DT::styleEqual(c(TRUE, FALSE), c("#e3f2fd", "white")),
             fontWeight = DT::styleEqual(c(TRUE, FALSE), c("bold", "normal")))
@@ -92,9 +94,11 @@ results_robustness_server <- function(input, output, session, rv,
     if (is.null(res) || nrow(res$coef_audit) == 0)
       return(DT::datatable(data.frame(Message = "Press Run.")))
     d <- res$coef_audit
-    dt <- dt_table(d, rownames = FALSE, options = list(pageLength = PAGE_LEN_DEFAULT))
+    d <- format_pvalue_dt(d, "p.value")
+    shadow_idx <- which(names(d) == "._p_p.value") - 1
+    dt <- dt_table(d, rownames = FALSE, options = list(pageLength = PAGE_LEN_DEFAULT,
+                   columnDefs = list(list(visible = FALSE, targets = shadow_idx))))
     dt <- DT::formatRound(dt, "Estimate", digits = 3)
-    dt <- DT::formatRound(dt, "p.value", digits = 4)
     dt <- DT::formatStyle(dt, "Is_Final",
             backgroundColor = DT::styleEqual(c(TRUE, FALSE), c("#e3f2fd", "white")),
             fontWeight = DT::styleEqual(c(TRUE, FALSE), c("bold", "normal")))
@@ -230,8 +234,17 @@ results_robustness_server <- function(input, output, session, rv,
                    options = list(pageLength = PAGE_LEN_DETAIL))
     for (nc in setdiff(num_cols, "p.value"))
       dt <- DT::formatRound(dt, nc, digits = 3)
-    if ("p.value" %in% names(res$detail))
-      dt <- DT::formatRound(dt, "p.value", digits = 4)
+    if ("p.value" %in% names(res$detail)) {
+      d_lsm <- res$detail
+      d_lsm <- format_pvalue_dt(d_lsm, "p.value")
+      # Rebuild DT with formatted p-values
+      shadow_idx <- which(names(d_lsm) == "._p_p.value") - 1
+      dt <- dt_table(d_lsm, rownames = FALSE,
+                     options = list(pageLength = PAGE_LEN_DETAIL,
+                                   columnDefs = list(list(visible = FALSE, targets = shadow_idx))))
+      for (nc in setdiff(num_cols, "p.value"))
+        dt <- DT::formatRound(dt, nc, digits = 3)
+    }
     dt
   })
 
@@ -309,9 +322,17 @@ results_robustness_server <- function(input, output, session, rv,
       dt <- DT::formatRound(dt, nc, digits = 3)
     if ("p.value" %in% names(res$detail)) {
       alpha <- mc_state$mc_alpha() %||% 0.05
+      d_sig <- res$detail
+      d_sig <- format_pvalue_dt(d_sig, "p.value", alpha = alpha)
+      shadow_idx <- which(names(d_sig) == "._p_p.value") - 1
+      dt <- dt_table(d_sig, rownames = FALSE,
+                     options = list(pageLength = PAGE_LEN_DETAIL,
+                                   columnDefs = list(list(visible = FALSE, targets = shadow_idx))))
+      for (nc in setdiff(num_cols, "p.value"))
+        dt <- DT::formatRound(dt, nc, digits = 3)
       dt <- DT::formatStyle(dt, "p.value",
-              backgroundColor = DT::styleInterval(alpha, c(PVALUE_GREEN, "white")))
-      dt <- DT::formatRound(dt, "p.value", digits = 4)
+              backgroundColor = DT::styleInterval(alpha, c(PVALUE_GREEN, "white")),
+              valueColumns = "._p_p.value")
     }
     dt
   })
@@ -339,11 +360,13 @@ results_robustness_server <- function(input, output, session, rv,
       return(DT::datatable(data.frame(
         Message = "Press Run. Requires at least one covariate.")))
     num_cols <- intersect(c("F_stat", "R2"), names(res))
-    dt <- dt_table(res, rownames = FALSE,
-                   options = list(pageLength = PAGE_LEN_DEFAULT))
-    for (nc in num_cols) dt <- DT::formatRound(dt, nc, digits = 3)
     if ("p.value" %in% names(res))
-      dt <- DT::formatRound(dt, "p.value", digits = 4)
+      res <- format_pvalue_dt(res, "p.value")
+    shadow_idx <- if ("._p_p.value" %in% names(res)) which(names(res) == "._p_p.value") - 1 else integer(0)
+    hide_defs <- if (length(shadow_idx) > 0) list(list(visible = FALSE, targets = shadow_idx)) else list()
+    dt <- dt_table(res, rownames = FALSE,
+                   options = list(pageLength = PAGE_LEN_DEFAULT, columnDefs = hide_defs))
+    for (nc in num_cols) dt <- DT::formatRound(dt, nc, digits = 3)
     if ("Verdict" %in% names(res)) {
       dt <- DT::formatStyle(dt, "Verdict",
               backgroundColor = DT::styleEqual(
@@ -419,11 +442,16 @@ results_robustness_server <- function(input, output, session, rv,
         Message = "No pairwise comparison available.")))
     dt <- dt_table(res$pairwise_comparison, rownames = FALSE,
                    options = list(pageLength = PAGE_LEN_DEFAULT))
-    num_cols <- intersect(c("Original_Estimate", "Clean_Estimate"),
-                          names(res$pairwise_comparison))
+    d_pw <- res$pairwise_comparison
+    num_cols <- intersect(c("Original_Estimate", "Clean_Estimate"), names(d_pw))
+    p_cols <- intersect(c("Original_p", "Clean_p"), names(d_pw))
+    if (length(p_cols) > 0) d_pw <- format_pvalue_dt(d_pw, p_cols)
+    shadow_p_cols <- paste0("._p_", p_cols)
+    shadow_p_idx <- which(names(d_pw) %in% shadow_p_cols) - 1
+    hide_defs <- if (length(shadow_p_idx) > 0) list(list(visible = FALSE, targets = shadow_p_idx)) else list()
+    dt <- dt_table(d_pw, rownames = FALSE,
+                   options = list(pageLength = PAGE_LEN_DEFAULT, columnDefs = hide_defs))
     for (nc in num_cols) dt <- DT::formatRound(dt, nc, digits = 3)
-    p_cols <- intersect(c("Original_p", "Clean_p"), names(res$pairwise_comparison))
-    for (pc in p_cols) dt <- DT::formatRound(dt, pc, digits = 4)
     if ("Direction_Changed" %in% names(res$pairwise_comparison)) {
       dt <- DT::formatStyle(dt, "Direction_Changed",
               backgroundColor = DT::styleEqual(
@@ -504,12 +532,19 @@ results_robustness_server <- function(input, output, session, rv,
                           names(d))
     dt <- dt_table(d, rownames = FALSE,
                    options = list(pageLength = PAGE_LEN_DETAIL))
-    for (nc in num_cols) dt <- DT::formatRound(dt, nc, digits = 3)
     if ("p.value" %in% names(d)) {
       alpha <- mc_state$mc_alpha() %||% 0.05
+      d <- format_pvalue_dt(d, "p.value", alpha = alpha)
+      shadow_idx <- which(names(d) == "._p_p.value") - 1
+      dt <- dt_table(d, rownames = FALSE,
+                     options = list(pageLength = PAGE_LEN_DETAIL,
+                                   columnDefs = list(list(visible = FALSE, targets = shadow_idx))))
+      for (nc in num_cols) dt <- DT::formatRound(dt, nc, digits = 3)
       dt <- DT::formatStyle(dt, "p.value",
-              backgroundColor = DT::styleInterval(alpha, c(PVALUE_GREEN, "white")))
-      dt <- DT::formatRound(dt, "p.value", digits = 4)
+              backgroundColor = DT::styleInterval(alpha, c(PVALUE_GREEN, "white")),
+              valueColumns = "._p_p.value")
+    } else {
+      for (nc in num_cols) dt <- DT::formatRound(dt, nc, digits = 3)
     }
     dt
   })
