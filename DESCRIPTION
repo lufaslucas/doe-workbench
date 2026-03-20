@@ -1,6 +1,6 @@
 Package: doe.workbench
 Title: Design of Experiments Workbench
-Version: 0.1.0
+Version: 0.2.0
 Authors@R: c(
     person("Stephanie", "Lucas", email = "stephanie.lucas@shell.com",
            role = c("aut", "cre", "cph")),
