@@ -5,7 +5,7 @@
 #' @param ... Additional arguments passed to [shiny::runApp()]
 #' @export
 run_doe_workbench <- function(port = 4564L, launch.browser = TRUE, ...) {
-  app_dir <- system.file("app", package = "DoEWorkbench")
+  app_dir <- system.file("app", package = "doe.workbench")
   if (app_dir == "") {
     # Development mode: run from source tree
     app_dir <- file.path(getwd(), "inst", "app")
