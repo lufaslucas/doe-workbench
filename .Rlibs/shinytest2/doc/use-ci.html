@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+
+
+<title>Using shinytest2 with continuous integration</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Using shinytest2 with continuous
+integration</h1>
+
+
+
+<p><code>{shinytest2}</code> can be used not only when developing
+applications locally – it can also be used with continuous integration
+(CI) platforms, such as <a href="https://docs.github.com/en/actions">GitHub Actions</a>.</p>
+<p>The rest of this document explains how to use
+<code>{shinytest2}</code> with GitHub in two use cases: with
+applications that stand alone (are not part of an R package), and with
+an application that are part of an R package.</p>
+<div id="overview" class="section level2">
+<h2>Overview</h2>
+<p>The overall procedure for enabling tests on a CI platform is
+this:</p>
+<ul>
+<li>First create tests locally (on your development machine) and save
+the expected results.</li>
+<li>Commit the expected results into the project’s git repository and
+push to GitHub.</li>
+<li>Create a GitHub Actions workflow file to run tests on GitHub Actions
+(GHA).</li>
+</ul>
+<p>Once you have set up continuous integration, the typical development
+cycle is this:</p>
+<ul>
+<li>Modify your project, commit, and push the changes.</li>
+<li>The CI platform will automatically do an <em>action</em>, in which
+it downloads the code and runs tests. If the tests fail, it will send
+you an email alert.</li>
+</ul>
+<p>As you develop your application, it may also be appropriate to add,
+remove, or modify tests, or re-run tests and save new expected
+results.</p>
+</div>
+<div id="a-repository-with-a-single-application" class="section level2">
+<h2>A repository with a single application</h2>
+<p>For Shiny applications that aren’t part of an R package, there are
+two common ways that the repository will be set up:</p>
+<ol style="list-style-type: decimal">
+<li>The repository contains one application, and the application files
+(like <code>app.R</code> and <code>global.R</code>) are contained at the
+top level of the repository.</li>
+<li>The repository contains more than one application files, and each
+application is contained in a subdirectory.</li>
+</ol>
+<p>This section explains how to set up GHA to test a repository with a
+single application.
+<!-- See https://github.com/rstudio/shinytest-ci-example for an example. --></p>
+<p>The directory structure of such a project will look something like
+this:</p>
+<pre><code>/
+├── .github
+│   └── workflows
+│       └── check-app.yaml
+├── .Rprofile
+├── README.md
+├── app.R
+├── renv/activate.R
+├── renv.lock
+└── tests
+    ├── testthat.R
+    └── testthat
+        ├── _snaps
+        │   └── shinytest2
+        │       ├── 001.json
+        │       ├── 002.png
+        │       ├── 003.json
+        │       └── 004.png
+        └── test-shinytest2.R</code></pre>
+<p>The files that you will need to add are described below.</p>
+<div id="check-app.yaml" class="section level3">
+<h3><code>check-app.yaml</code></h3>
+<p>This file contains information for GitHub Actions to build and test
+your application. You can easily set up this action in your repo with
+help from the <a href="https://usethis.r-lib.org">usethis
+package</a>:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a>usethis<span class="sc">::</span><span class="fu">use_github_action</span>(</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a>  <span class="at">url =</span> <span class="st">&quot;https://github.com/rstudio/shinytest2/raw/main/actions/test-app/example-test-app-renv.yaml&quot;</span>,</span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a>  <span class="at">save_as =</span> <span class="st">&quot;check-app.yaml&quot;</span></span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a>)</span></code></pre></div>
+<p>It should look similar to this:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode yml"><code class="sourceCode yaml"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="co"># Workflow derived from https://github.com/rstudio/shinytest2/tree/main/actions/test-app/example-test-app-description.yaml</span></span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a><span class="co"># Need help debugging build failures? Start at https://github.com/r-lib/actions#where-to-find-help</span></span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a><span class="fu">on</span><span class="kw">:</span></span>
+<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a><span class="at">  </span><span class="fu">push</span><span class="kw">:</span></span>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a><span class="at">    </span><span class="fu">branches</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="at">main</span><span class="kw">,</span><span class="at"> master</span><span class="kw">]</span></span>
+<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a><span class="at">  </span><span class="fu">pull_request</span><span class="kw">:</span></span>
+<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a><span class="at">    </span><span class="fu">branches</span><span class="kw">:</span><span class="at"> </span><span class="kw">[</span><span class="at">main</span><span class="kw">,</span><span class="at"> master</span><span class="kw">]</span></span>
+<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a></span>
+<span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a><span class="fu">name</span><span class="kw">:</span><span class="at"> Test app w/ {renv}</span></span>
+<span id="cb3-10"><a href="#cb3-10" tabindex="-1"></a></span>
+<span id="cb3-11"><a href="#cb3-11" tabindex="-1"></a><span class="fu">jobs</span><span class="kw">:</span></span>
+<span id="cb3-12"><a href="#cb3-12" tabindex="-1"></a><span class="at">  </span><span class="fu">test-app</span><span class="kw">:</span></span>
+<span id="cb3-13"><a href="#cb3-13" tabindex="-1"></a><span class="at">    </span><span class="fu">runs-on</span><span class="kw">:</span><span class="at"> ${{ matrix.config.os }}</span></span>
+<span id="cb3-14"><a href="#cb3-14" tabindex="-1"></a></span>
+<span id="cb3-15"><a href="#cb3-15" tabindex="-1"></a><span class="at">    </span><span class="fu">name</span><span class="kw">:</span><span class="at"> ${{ matrix.config.os }} (${{ matrix.config.r }})</span></span>
+<span id="cb3-16"><a href="#cb3-16" tabindex="-1"></a></span>
+<span id="cb3-17"><a href="#cb3-17" tabindex="-1"></a><span class="at">    </span><span class="fu">strategy</span><span class="kw">:</span></span>
+<span id="cb3-18"><a href="#cb3-18" tabindex="-1"></a><span class="at">      </span><span class="fu">fail-fast</span><span class="kw">:</span><span class="at"> </span><span class="ch">false</span></span>
+<span id="cb3-19"><a href="#cb3-19" tabindex="-1"></a><span class="at">      </span><span class="fu">matrix</span><span class="kw">:</span></span>
+<span id="cb3-20"><a href="#cb3-20" tabindex="-1"></a><span class="at">        </span><span class="fu">config</span><span class="kw">:</span></span>
+<span id="cb3-21"><a href="#cb3-21" tabindex="-1"></a><span class="at">          </span><span class="kw">-</span><span class="at"> </span><span class="kw">{</span><span class="fu">os</span><span class="kw">:</span><span class="at"> ubuntu-latest</span><span class="kw">,</span><span class="at"> </span><span class="fu">r</span><span class="kw">:</span><span class="at"> release</span><span class="kw">}</span></span>
+<span id="cb3-22"><a href="#cb3-22" tabindex="-1"></a></span>
+<span id="cb3-23"><a href="#cb3-23" tabindex="-1"></a><span class="at">    </span><span class="fu">env</span><span class="kw">:</span></span>
+<span id="cb3-24"><a href="#cb3-24" tabindex="-1"></a><span class="at">      </span><span class="fu">GITHUB_PAT</span><span class="kw">:</span><span class="at"> ${{ secrets.GITHUB_TOKEN }}</span></span>
+<span id="cb3-25"><a href="#cb3-25" tabindex="-1"></a><span class="at">      </span><span class="fu">R_KEEP_PKG_SOURCE</span><span class="kw">:</span><span class="at"> </span><span class="ch">yes</span></span>
+<span id="cb3-26"><a href="#cb3-26" tabindex="-1"></a></span>
+<span id="cb3-27"><a href="#cb3-27" tabindex="-1"></a><span class="at">    </span><span class="fu">steps</span><span class="kw">:</span></span>
+<span id="cb3-28"><a href="#cb3-28" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> actions/checkout@v2</span></span>
+<span id="cb3-29"><a href="#cb3-29" tabindex="-1"></a></span>
+<span id="cb3-30"><a href="#cb3-30" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> r-lib/actions/setup-pandoc@v2</span></span>
+<span id="cb3-31"><a href="#cb3-31" tabindex="-1"></a></span>
+<span id="cb3-32"><a href="#cb3-32" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> r-lib/actions/setup-r@v2</span></span>
+<span id="cb3-33"><a href="#cb3-33" tabindex="-1"></a><span class="at">        </span><span class="fu">with</span><span class="kw">:</span></span>
+<span id="cb3-34"><a href="#cb3-34" tabindex="-1"></a><span class="at">          </span><span class="fu">r-version</span><span class="kw">:</span><span class="at"> ${{ matrix.config.r }}</span></span>
+<span id="cb3-35"><a href="#cb3-35" tabindex="-1"></a><span class="at">          </span><span class="fu">use-public-rspm</span><span class="kw">:</span><span class="at"> </span><span class="ch">true</span></span>
+<span id="cb3-36"><a href="#cb3-36" tabindex="-1"></a></span>
+<span id="cb3-37"><a href="#cb3-37" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> r-lib/actions/setup-renv@v2</span></span>
+<span id="cb3-38"><a href="#cb3-38" tabindex="-1"></a></span>
+<span id="cb3-39"><a href="#cb3-39" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> rstudio/shinytest2/actions/test-app@actions/v1</span></span>
+<span id="cb3-40"><a href="#cb3-40" tabindex="-1"></a><span class="at">        </span><span class="fu">with</span><span class="kw">:</span></span>
+<span id="cb3-41"><a href="#cb3-41" tabindex="-1"></a><span class="at">          </span><span class="fu">app-dir</span><span class="kw">:</span><span class="at"> </span><span class="st">&quot;.&quot;</span></span></code></pre></div>
+<p>You should change the <code>os</code> and <code>r</code> version to
+whatever operating system and R version is being used on the platform
+that your application will be deployed to.</p>
+</div>
+<div id="renv.lock-renvactivate.r-.rprofile" class="section level3">
+<h3><code>renv.lock</code>, <code>renv/activate.R</code>,
+<code>.Rprofile</code></h3>
+<p><code>{renv}</code> project-local dependency management system for
+projects. This is useful for Shiny applications where using specific
+package versions for all of your Shiny app dependencies.
+<code>{renv}</code> uses the same mechanism that is used by shinyapps.io
+and RStudio Connect.</p>
+<p><code>{renv}</code> auto-generates these three files using
+is<code>renv::init()</code> and <code>renv::snapshot()</code>.</p>
+<table>
+<colgroup>
+<col width="18%" />
+<col width="81%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">File</th>
+<th align="left">Usage</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left"><code>.Rprofile</code></td>
+<td align="left">Used to activate <code>{renv}</code> for new R sessions
+launched in the project.</td>
+</tr>
+<tr class="even">
+<td align="left"><code>renv.lock</code></td>
+<td align="left">The lockfile, describing the state of your project’s
+library at some point in time.</td>
+</tr>
+<tr class="odd">
+<td align="left"><code>renv/activate.R</code></td>
+<td align="left">The activation script run by the project
+<code>.Rprofile</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>To create <code>.Rprofile</code> and <code>renv/activate.R</code>,
+call <code>renv::init()</code> within your App project. To create /
+update <code>renv.lock</code>, call <code>renv::snapshot()</code>.</p>
+<p><strong>Whenever you update packages on your development machine, you
+should run <code>renv::snapshot()</code> command again to make sure the
+packages used on GitHub stay in sync.</strong></p>
+<p>To learn more about <code>{renv}</code>, please see their <a href="https://rstudio.github.io/renv/articles/renv.html">Introduction to
+renv</a> and <a href="https://rstudio.github.io/renv/articles/collaborating.html">Collaborating
+with renv</a> articles.</p>
+<p>An alternative to using <code>{renv}</code> is to create a
+<code>DESCRIPTION</code> file. This will not lock package versions;
+instead, it will use the latest version of each package from CRAN.</p>
+</div>
+<div id="running-the-first-build" class="section level3">
+<h3>Running the first build</h3>
+<p>Once you’ve added these files, commit them and push to GitHub. This
+will trigger a build on GitHub Actions (GHA).</p>
+<p>The first successful run of your workflow on GHA will generally take
+much longer than subsequent runs, because it needs to install all the R
+packages the first time. After a successful run, the packages are
+cached, so the builds should be much faster.</p>
+</div>
+</div>
+<div id="a-repository-with-multiple-applications" class="section level2">
+<h2>A repository with multiple applications</h2>
+<p>Another way to run your tests is using a repository with multiple
+applications, each in its own subdirectory.
+<!-- See https://github.com/rstudio/shinytest-ci-example-multi for an example. --></p>
+<p>The directory structure would look something like this:</p>
+<pre><code>/
+├── .github
+│   └── workflows
+│       └── check-app.yaml
+├── .Rprofile
+├── README.md
+├── renv/activate.R
+├── renv.lock
+├── 01_hello
+│   ├── app.R
+│   └── tests
+│       ├── testthat.R
+│       └── testthat
+│           ├── _snaps
+│           │   └── shinytest2
+│           │       ├── 001.json
+│           │       ├── 002.png
+│           │       ├── 003.json
+│           │       └── 004.png
+│           └── test-shinytest2.R
+└── 06_tabsets
+    ├── app.R
+    └── tests
+        ├── testthat.R
+        └── testthat
+            ├── _snaps
+            │   └── shinytest2
+            │       ├── 001.json
+            │       ├── 002.png
+            │       ├── 003.json
+            │       ├── 004.png
+            │       ├── 005.json
+            │       └── 006.png
+            └── test-shinytest2.R</code></pre>
+<p>For a repository with this structure, the configuration is largely
+the same as a repository with a single app, as described above. The only
+difference is in the <code>check-app.yaml</code> file.</p>
+<div id="check-app.yaml-1" class="section level3">
+<h3><code>check-app.yaml</code></h3>
+<p>The <code>check-app.yaml</code> have all App dir locations supplied
+to <code>app-dir</code> using the multiline yaml string syntax.</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> rstudio/shinytest2/actions/test-app@actions/v1</span></span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a><span class="at">        </span><span class="fu">with</span><span class="kw">:</span></span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a><span class="fu">          app-dir</span><span class="kw">: </span><span class="ch">|</span></span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a>            01_hello</span>
+<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a>            06_tabsets</span></code></pre></div>
+</div>
+</div>
+<div id="testing-applications-in-a-package" class="section level2">
+<h2>Testing applications in a package</h2>
+<p>See the <a href="./use-package.html">Using shinytest2 with R
+packages</a> article.</p>
+</div>
+<div id="frequently-asked-questions" class="section level2">
+<h2>Frequently asked questions</h2>
+<div id="how-do-i-add-a-status-badge-to-my-project" class="section level3">
+<h3>How do I add a status badge to my project?</h3>
+<p>See GitHub’s docs on <a href="https://docs.github.com/en/actions/monitoring-and-troubleshooting-workflows/adding-a-workflow-status-badge">adding
+a badge</a>.</p>
+<p>If your workflow file is named <code>check-app.yaml</code> in the
+<code>schloerke/example-app</code> repo, you can add a status badge to
+your GitHub to your README.md with the following line:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode md"><code class="sourceCode markdown"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="al">![check-app](https://github.com/schloerke/example-app/actions/workflows/check-app.yml/badge.svg)</span></span></code></pre></div>
+<p>In your <code>README.md</code> file, you can add a build status
+badge, like the one below, so that you can see the status of your code
+at a glance:</p>
+</div>
+<div id="how-do-i-use-a-description-file-instead-of-renv" class="section level3">
+<h3>How do I use a <code>DESCRIPTION</code> file instead of
+<code>{renv}</code>?</h3>
+<p>Instead of using <code>{renv}</code>, you can use a
+<code>DESCRIPTION</code> file can be used to tell GHA which packages are
+needed to test the application. Instead of locking each package to a
+specific version like <code>{renv}</code>, this will result in the
+latest version of each package being downloaded from CRAN. This may be
+appropriate if you want to make sure your application works with the
+latest version of each package, instead of a frozen set of packages.</p>
+<p>To use a <code>DESCRIPTION</code> file, you need to modify your
+<code>check-app.yaml</code> file to use <code>r-lib/actions</code>
+default package installation system instead of <code>{renv}</code>.
+Replace this line from the template provided above:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode yml"><code class="sourceCode yaml"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> r-lib/actions/setup-renv@v2</span></span></code></pre></div>
+<p>with</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">uses</span><span class="kw">:</span><span class="at"> r-lib/actions/setup-r-dependencies@v2</span></span></code></pre></div>
+<p>You will not want generate a <code>renv.lock</code>,
+<code>.Rprofile</code>, or other <code>{renv}</code> files, so do not
+run the <code>{renv}</code> commands listed above.</p>
+<p>Next, create a <code>DESCRIPTION</code> file that looks something
+like this:</p>
+<pre><code>Imports:
+  shiny,
+  shinytest2</code></pre>
+<p>The <code>Imports</code> field must list all R packages that your
+application directly uses.</p>
+<p>Normally the latest versions of the listed packages will be installed
+from CRAN. However, if you need to install development versions of
+packages from GitHub, that can be done by adding a <code>Remotes</code>
+section. For example:</p>
+<pre><code>Remotes:
+  rstudio/shiny,
+  rstudio/shinytest2@dev</code></pre>
+<p>This tells GitHub to install the <code>{shiny}</code> package from
+the <code>main</code> branch of <a href="https://github.com/rstudio/shiny" class="uri">https://github.com/rstudio/shiny</a>, the
+<code>{shinytest2}</code> package from the <code>dev</code> branch of <a href="https://github.com/rstudio/shinytest2" class="uri">https://github.com/rstudio/shinytest2</a>. In addition to
+branch names like <code>dev</code>, you can use commit hashes or
+tags.</p>
+</div>
+</div>
+<div id="example-workflows" class="section level1">
+<h1>Example workflows</h1>
+<p>To view example workflows and more description about the
+<code>test-app</code> GitHub Actions step, please see <a href="https://github.com/rstudio/shinytest2/tree/main/actions/test-app" class="uri">https://github.com/rstudio/shinytest2/tree/main/actions/test-app</a>
+for more information examples.</p>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

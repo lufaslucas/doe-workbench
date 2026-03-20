@@ -86,6 +86,18 @@ server <- function(input, output, session) {
       vif_df        = rv$vif_df,
       excluded_obs  = rv$excluded_obs,
       prune_notes   = rv$prune_notes,
+      # Model spec (builder settings)
+      model_active_response            = rv$model_active_response,
+      model_custom_formula             = rv$model_custom_formula,
+      model_max_way                    = rv$model_max_way,
+      model_poly_degree                = rv$model_poly_degree,
+      model_include_covariates         = rv$model_include_covariates,
+      model_formula_covariates         = rv$model_formula_covariates,
+      model_max_covariates_per_formula = rv$model_max_covariates_per_formula,
+      model_include_cov_fac            = rv$model_include_cov_fac,
+      model_include_blocks             = rv$model_include_blocks,
+      model_include_block_fac          = rv$model_include_block_fac,
+      model_append_formulas            = rv$model_append_formulas,
       design_metadata      = rv$design_metadata,
       design_model_formula = rv$design_model_formula,
       design_alias_formula = rv$design_alias_formula,
@@ -248,6 +260,19 @@ server <- function(input, output, session) {
     rv$design_model_formula  <- state$design_model_formula %||% ""
     rv$design_alias_formula  <- state$design_alias_formula %||% ""
     rv$alias_threshold       <- state$alias_threshold %||% ALIAS_CORR_THRESH
+    # Model spec (backward-compatible: defaults for old saves)
+    # Route through setter helpers for validation/normalisation
+    set_model_active_response(rv, state$model_active_response)
+    set_model_custom_formula(rv, state$model_custom_formula)
+    set_model_max_way(rv, state$model_max_way)
+    set_model_poly_degree(rv, state$model_poly_degree)
+    set_model_include_covariates(rv, state$model_include_covariates %||% TRUE)
+    set_model_formula_covariates(rv, state$model_formula_covariates)
+    set_model_max_covariates_per_formula(rv, state$model_max_covariates_per_formula)
+    set_model_include_cov_fac(rv, state$model_include_cov_fac)
+    set_model_include_blocks(rv, state$model_include_blocks %||% TRUE)
+    set_model_include_block_fac(rv, state$model_include_block_fac)
+    set_model_append_formulas(rv, state$model_append_formulas)
     # Formula/alias state (backward-compatible: defaults for old saves)
     rv$formula_aliases          <- state$formula_aliases %||% list()
     rv$alias_labels             <- state$alias_labels %||% list()

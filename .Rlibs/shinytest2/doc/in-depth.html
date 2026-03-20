@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+
+
+<title>Testing in depth</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Testing in depth</h1>
+
+
+
+<div id="customizing-test-scripts" class="section level2">
+<h2>Customizing test scripts</h2>
+<p>The test recorder is the easiest way to create test scripts, but it
+is not the only way. You can create and edit test scripts manually.</p>
+<p>The final product would look something like:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="co"># File: ./tests/testthat/test-shinytest2.R</span></span>
+<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="fu">test_that</span>(<span class="st">&quot;App initialization is consistent&quot;</span>, {</span>
+<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a>  app <span class="ot">&lt;-</span> AppDriver<span class="sc">$</span><span class="fu">new</span>()</span>
+<span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" tabindex="-1"></a>  app<span class="sc">$</span><span class="fu">expect_values</span>()</span>
+<span id="cb1-6"><a href="#cb1-6" tabindex="-1"></a>})</span></code></pre></div>
+<p>A test script has this basic structure: first, there is an
+initialization, then the expectations are performed.</p>
+<p>In the initialization, the script creates a new
+<code>AppDriver</code> object.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a>app <span class="ot">&lt;-</span> AppDriver<span class="sc">$</span><span class="fu">new</span>()</span></code></pre></div>
+<p>Next, define some interactions with the application and makes
+expectations via snapshots.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a>app<span class="sc">$</span><span class="fu">set_inputs</span>(<span class="at">check_group =</span> <span class="fu">c</span>(<span class="st">&quot;1&quot;</span>, <span class="st">&quot;2&quot;</span>))</span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>app<span class="sc">$</span><span class="fu">set_inputs</span>(<span class="at">check_group =</span> <span class="fu">c</span>(<span class="st">&quot;1&quot;</span>, <span class="st">&quot;2&quot;</span>, <span class="st">&quot;3&quot;</span>))</span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a>app<span class="sc">$</span><span class="fu">click</span>(<span class="st">&quot;action&quot;</span>)</span>
+<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a>app<span class="sc">$</span><span class="fu">expect_values</span>()</span>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a>app<span class="sc">$</span><span class="fu">click</span>(<span class="st">&quot;action&quot;</span>)</span>
+<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a>app<span class="sc">$</span><span class="fu">expect_values</span>()</span></code></pre></div>
+<p>For customizing a script, the second portion – the interactions and
+expectations – is the part you will want to modify.</p>
+<div id="setting-inputs-with-appset_inputs-and-appclick" class="section level3">
+<h3>Setting inputs with <code>app$set_inputs()</code> and
+<code>app$click()</code></h3>
+<p>With <code>app$set_inputs()</code>, you provide the name of one or
+more inputs and corresponding values to set them to. Consider this set
+of directives:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>app<span class="sc">$</span><span class="fu">set_inputs</span>(<span class="at">check_group =</span> <span class="fu">c</span>(<span class="st">&quot;1&quot;</span>, <span class="st">&quot;2&quot;</span>))</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>app<span class="sc">$</span><span class="fu">set_inputs</span>(<span class="at">check_group =</span> <span class="fu">c</span>(<span class="st">&quot;1&quot;</span>, <span class="st">&quot;2&quot;</span>, <span class="st">&quot;3&quot;</span>))</span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>app<span class="sc">$</span><span class="fu">click</span>(<span class="st">&quot;action&quot;</span>)</span></code></pre></div>
+<p>Notice that we set the value of <code>check_group</code> two times in
+a row. When we recorded this test script, it started with the value
+<code>&quot;1&quot;</code>, and then we checked the <code>&quot;2&quot;</code> and
+<code>&quot;3&quot;</code> boxes. The recorded script set the value to
+<code>c(&quot;1&quot;, &quot;2&quot;)</code>, and then <code>c(&quot;1&quot;, &quot;2&quot;, &quot;3&quot;)</code>. The
+<code>c(&quot;1&quot;, &quot;2&quot;)</code> value was simply an intermediate step.</p>
+<p>It is possible to simplify and speed up the tests by dropping the
+intermediate step, which leaves us with this:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>app<span class="sc">$</span><span class="fu">set_inputs</span>(<span class="at">check_group =</span> <span class="fu">c</span>(<span class="st">&quot;1&quot;</span>, <span class="st">&quot;2&quot;</span>, <span class="st">&quot;3&quot;</span>))</span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>app<span class="sc">$</span><span class="fu">click</span>(<span class="st">&quot;action&quot;</span>)</span></code></pre></div>
+<p>Multiple calls to <code>app$set_inputs()</code> should be reduced to
+a single line unless the side effects of setting inputs multiple times
+is desired. When <code>app$set_inputs()</code> is called, it normally
+returns control and moves on to the next step only after the server
+sends a response to the client. The reason it waits for a response is so
+that a subsequent call to <code>app$snapshot()</code> will be sure to
+capture the updated output values. If <code>app$set_inputs()</code> did
+not wait for a update, then, if the output update did not happen very
+quickly, a snapshot might capture the state of the application before
+the outputs are updated.</p>
+</div>
+<div id="making-expectations" class="section level3">
+<h3>Making expectations</h3>
+<p>For an in-depth discussion of expectations, see the <a href="./robust.html">Robust testing vignette</a>.</p>
+<p>There are a couple standard ways to make expectations from your
+<code>AppDriver</code> object.</p>
+<ul>
+<li><p><code>app$expect_values()</code>: This is the simplest way to
+make an expectation. It creates a list of values and compares them to
+the current values of the application. It also takes a debug screenshot
+and stores it as a snapshot. However, this snapshot will never fail an
+expectation test. The extra screenshot file is useful for manually
+determining if UI changes have happened over time while not producing
+numerous false-positive test failures.</p></li>
+<li><p><code>app$expect_screenshot()</code>: This method takes a
+screenshot of the application and compares it to a reference screenshot.
+If the screenshots are different, it fails the test.</p></li>
+</ul>
+<p>There are few ways to use <code>app$expect_values()</code>. The
+simplest way is to call it with no arguments:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a>app<span class="sc">$</span><span class="fu">expect_values</span>()</span></code></pre></div>
+<p>The first time this is called in a test script, it will record all
+<code>input</code>, <code>output</code>, and <code>export</code> values
+from the application, in a file called <code>001.json</code>. The next
+call will save the values in <code>002.json</code>, and so on.</p>
+<p>Each time you call <code>app$expect_values()</code>, it will also
+save a debug screenshot of the web browser, in a file
+<code>001_.png</code>, <code>002_.png</code>, and so on. These screen
+shots are useful for debugging your tests and inspecting what they’re
+doing. You can tell it to not take screen shots, to save space and make
+the tests run slightly faster, in the initialization step, with:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a>app <span class="ot">&lt;-</span> AppDriver<span class="sc">$</span><span class="fu">new</span>(<span class="at">expect_values_screenshot_args =</span> <span class="cn">FALSE</span>)</span></code></pre></div>
+<p>If you want to disable screenshots for a single
+<code>app$expect_values()</code> call, you can use:</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a>app<span class="sc">$</span><span class="fu">expect_values</span>(<span class="at">screenshot_args =</span> <span class="cn">FALSE</span>)</span></code></pre></div>
+<p>If you want more targeted tests, you can snapshot specific items by
+using the <code>input</code>, <code>output</code>, and
+<code>export</code> parameters. For example, to capture the value of
+just the outputs named <code>&quot;a&quot;</code> and <code>&quot;b&quot;</code>, you would
+call:</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a>app<span class="sc">$</span><span class="fu">expect_values</span>(<span class="at">output =</span> <span class="fu">c</span>(<span class="st">&quot;a&quot;</span>, <span class="st">&quot;b&quot;</span>))</span></code></pre></div>
+<p>You could also capture specific inputs or exports:</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a>app<span class="sc">$</span><span class="fu">expect_values</span>(</span>
+<span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a>  <span class="at">input =</span> <span class="st">&quot;n&quot;</span>,</span>
+<span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a>  <span class="at">output =</span> <span class="fu">c</span>(<span class="st">&quot;a&quot;</span>, <span class="st">&quot;b&quot;</span>),</span>
+<span id="cb10-4"><a href="#cb10-4" tabindex="-1"></a>  <span class="at">export =</span> <span class="fu">c</span>(<span class="st">&quot;e1&quot;</span>, <span class="st">&quot;e2&quot;</span>)</span>
+<span id="cb10-5"><a href="#cb10-5" tabindex="-1"></a>)</span></code></pre></div>
+<p>Finally, if you want to snapshot all <code>output</code>s but no
+inputs or exports, you can simply set <code>output</code> to
+<code>TRUE</code> as only values that are requested are recorded:</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a>app<span class="sc">$</span><span class="fu">expect_values</span>(<span class="at">output =</span> <span class="cn">TRUE</span>)</span></code></pre></div>
+<p>The same can be used to snapshot all <code>input</code> and/or all
+<code>export</code> values. To capture all <code>output</code> and
+<code>export</code> values, but no <code>input</code> values:</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a>app<span class="sc">$</span><span class="fu">expect_values</span>(<span class="at">output =</span> <span class="cn">TRUE</span>, <span class="at">export =</span> <span class="cn">TRUE</span>)</span></code></pre></div>
+</div>
+<div id="exported-values" class="section level3">
+<h3>Exported values</h3>
+<p>In some cases, it’s useful to snapshot some bits of internal state of
+an application – state that’s not reflected directly in the inputs or
+outputs. This can be done by <em>export</em>ing values.</p>
+<p>Consider this toy example where an application has an internal
+reactive expression that would be convenient to capture.</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a><span class="fu">shinyApp</span>(</span>
+<span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a>  <span class="fu">fluidPage</span>(</span>
+<span id="cb13-3"><a href="#cb13-3" tabindex="-1"></a>    <span class="fu">numericInput</span>(<span class="st">&quot;x&quot;</span>, <span class="st">&quot;x&quot;</span>, <span class="dv">4</span>),</span>
+<span id="cb13-4"><a href="#cb13-4" tabindex="-1"></a>    <span class="fu">numericInput</span>(<span class="st">&quot;y&quot;</span>, <span class="st">&quot;y&quot;</span>, <span class="dv">10</span>),</span>
+<span id="cb13-5"><a href="#cb13-5" tabindex="-1"></a>    <span class="fu">numericInput</span>(<span class="st">&quot;z&quot;</span>, <span class="st">&quot;z&quot;</span>, <span class="dv">100</span>),</span>
+<span id="cb13-6"><a href="#cb13-6" tabindex="-1"></a>    <span class="fu">verbatimTextOutput</span>(<span class="st">&quot;result&quot;</span>, <span class="at">placeholder =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb13-7"><a href="#cb13-7" tabindex="-1"></a>  ),</span>
+<span id="cb13-8"><a href="#cb13-8" tabindex="-1"></a>  <span class="cf">function</span>(input, output, session) {</span>
+<span id="cb13-9"><a href="#cb13-9" tabindex="-1"></a>    xy <span class="ot">&lt;-</span> <span class="fu">reactive</span>(input<span class="sc">$</span>x <span class="sc">*</span> input<span class="sc">$</span>y)</span>
+<span id="cb13-10"><a href="#cb13-10" tabindex="-1"></a>    yz <span class="ot">&lt;-</span> <span class="fu">reactive</span>(input<span class="sc">$</span>y <span class="sc">+</span> input<span class="sc">$</span>z)</span>
+<span id="cb13-11"><a href="#cb13-11" tabindex="-1"></a></span>
+<span id="cb13-12"><a href="#cb13-12" tabindex="-1"></a>    output<span class="sc">$</span>result <span class="ot">&lt;-</span> <span class="fu">renderText</span>({</span>
+<span id="cb13-13"><a href="#cb13-13" tabindex="-1"></a>      <span class="fu">xy</span>() <span class="sc">/</span> <span class="fu">yz</span>()</span>
+<span id="cb13-14"><a href="#cb13-14" tabindex="-1"></a>    })</span>
+<span id="cb13-15"><a href="#cb13-15" tabindex="-1"></a></span>
+<span id="cb13-16"><a href="#cb13-16" tabindex="-1"></a>    <span class="fu">exportTestValues</span>(</span>
+<span id="cb13-17"><a href="#cb13-17" tabindex="-1"></a>      <span class="at">xy =</span> {</span>
+<span id="cb13-18"><a href="#cb13-18" tabindex="-1"></a>        <span class="fu">xy</span>()</span>
+<span id="cb13-19"><a href="#cb13-19" tabindex="-1"></a>      },</span>
+<span id="cb13-20"><a href="#cb13-20" tabindex="-1"></a>      <span class="at">yz =</span> {</span>
+<span id="cb13-21"><a href="#cb13-21" tabindex="-1"></a>        <span class="fu">yz</span>()</span>
+<span id="cb13-22"><a href="#cb13-22" tabindex="-1"></a>      }</span>
+<span id="cb13-23"><a href="#cb13-23" tabindex="-1"></a>    )</span>
+<span id="cb13-24"><a href="#cb13-24" tabindex="-1"></a>  }</span>
+<span id="cb13-25"><a href="#cb13-25" tabindex="-1"></a>)</span></code></pre></div>
+<p><img role="img" aria-label="Screenshot of a Shiny app showing the shinytest2 test recorder with exported values visible in the app&#39;s code, demonstrating how exportTestValues() is used to expose internal reactive values for testing" src="data:image/png;base64,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" alt="Screenshot of a Shiny app showing the shinytest2 test recorder with exported values visible in the app&#39;s code, demonstrating how exportTestValues() is used to expose internal reactive values for testing" width="100%" style="display: block; margin: auto;" /></p>
+<p>Notice these lines:</p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a>    <span class="fu">exportTestValues</span>(</span>
+<span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a>      <span class="at">xy =</span> {</span>
+<span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a>        <span class="fu">xy</span>()</span>
+<span id="cb14-4"><a href="#cb14-4" tabindex="-1"></a>      },</span>
+<span id="cb14-5"><a href="#cb14-5" tabindex="-1"></a>      <span class="at">yz =</span> {</span>
+<span id="cb14-6"><a href="#cb14-6" tabindex="-1"></a>        <span class="fu">yz</span>()</span>
+<span id="cb14-7"><a href="#cb14-7" tabindex="-1"></a>      }</span>
+<span id="cb14-8"><a href="#cb14-8" tabindex="-1"></a>    )</span></code></pre></div>
+<p>This creates exported values called <code>xy</code> and
+<code>yz</code>. When a test snapshot is taken, it evaluates the
+reactive expression and inserts their values in the snapshot:</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode json"><code class="sourceCode json"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a>  <span class="dt">&quot;input&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb15-3"><a href="#cb15-3" tabindex="-1"></a>    <span class="dt">&quot;x&quot;</span><span class="fu">:</span> <span class="dv">4</span><span class="fu">,</span></span>
+<span id="cb15-4"><a href="#cb15-4" tabindex="-1"></a>    <span class="dt">&quot;y&quot;</span><span class="fu">:</span> <span class="dv">10</span><span class="fu">,</span></span>
+<span id="cb15-5"><a href="#cb15-5" tabindex="-1"></a>    <span class="dt">&quot;z&quot;</span><span class="fu">:</span> <span class="dv">100</span></span>
+<span id="cb15-6"><a href="#cb15-6" tabindex="-1"></a>  <span class="fu">},</span></span>
+<span id="cb15-7"><a href="#cb15-7" tabindex="-1"></a>  <span class="dt">&quot;output&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb15-8"><a href="#cb15-8" tabindex="-1"></a>    <span class="dt">&quot;result&quot;</span><span class="fu">:</span> <span class="st">&quot;0.3636364&quot;</span></span>
+<span id="cb15-9"><a href="#cb15-9" tabindex="-1"></a>  <span class="fu">},</span></span>
+<span id="cb15-10"><a href="#cb15-10" tabindex="-1"></a>  <span class="dt">&quot;export&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb15-11"><a href="#cb15-11" tabindex="-1"></a>    <span class="dt">&quot;xy&quot;</span><span class="fu">:</span> <span class="dv">40</span><span class="fu">,</span></span>
+<span id="cb15-12"><a href="#cb15-12" tabindex="-1"></a>    <span class="dt">&quot;yz&quot;</span><span class="fu">:</span> <span class="dv">110</span></span>
+<span id="cb15-13"><a href="#cb15-13" tabindex="-1"></a>  <span class="fu">}</span></span>
+<span id="cb15-14"><a href="#cb15-14" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<p>Note that the expression (i.e. <code>xy()</code> and
+<code>yz()</code>) is saved when <code>exportTestValues()</code> is
+called, not the specific values. Generally, you should keep these
+expressions as simple as possible so that test failures yield
+informative outputs. Note that any value here has to be serializable to
+JSON, so it’s not suitable for testing complex objects.</p>
+</div>
+<div id="adding-delays" class="section level3">
+<h3>Adding delays</h3>
+<p>In some cases, you may need to wait for some amount of time between
+steps (e.g. waiting for CSS animations). You can do this by adding
+<code>Sys.sleep()</code> in your script. For example:</p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" tabindex="-1"></a><span class="fu">Sys.sleep</span>(<span class="fl">0.5</span>)</span></code></pre></div>
+<p>However, if you are waiting for some Shiny reactives to be
+calculated, please read more in the <a href="#wait-for-value">Waiting
+for an <code>output</code> (or <code>input</code>) value</a>
+section.</p>
+</div>
+<div id="controlling-random-values" class="section level3">
+<h3>Controlling random values</h3>
+<p>If your application uses randomly-generated values (by calling
+functions like <code>rnorm</code>, <code>runif</code>,
+<code>sample</code> directly or indirectly), then, in normal operation,
+it will produce different results on each run. Because
+<code>{shinytest2}</code> works by comparing the current state of an
+application to a previous state, these random changes will cause test
+failures.</p>
+<p>To make such applications exactly repeatable, you can set the random
+seed. This can be done by specifying a random seed in the recorder. The
+seed can be any integer value.</p>
+<p><img role="img" aria-label="Screenshot of the test recorder interface showing the random seed configuration field where users can set a seed value to ensure reproducible test results for applications using random number generation" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAewAAAA5CAYAAAD0rhhIAAABQWlDQ1BJQ0MgUHJvZmlsZQAAKJFjYGASSCwoyGFhYGDIzSspCnJ3UoiIjFJgf8bAzCDIwMXAw6CdmFxc4BgQ4ANUwgCjUcG3awyMIPqyLsiswFkVpxv22HItNeeccqHf7TamehTAlZJanAyk/wBxUnJBUQkDA2MCkK1cXlIAYrcA2SJFQEcB2TNA7HQIew2InQRhHwCrCQlyBrKvANkCyRmJKUD2EyBbJwlJPB2JDbUXBDiCHX2DQ/3cCTiVdFCSWlECop3zCyqLMtMzShQcgSGUquCZl6yno2BkYGTEwAAKb4jq74ngcGSsdkKIpWgyMBhtYWBgYkaIZZYzMOwKB3pZFiGmacrAIPSVgWEvb0FiUSLcAYzfWIrTjI0gbEkeYHA3////woSBgbeageHf2///v3/4///3FAYGdlsGhp5uAJTVW+iWJnWxAAAAYmVYSWZNTQAqAAAACAACARIAAwAAAAEAAQAAh2kABAAAAAEAAAAmAAAAAAADkoYABwAAABIAAABQoAIABAAAAAEAAAHsoAMABAAAAAEAAAA5AAAAAEFTQ0lJAAAAU2NyZWVuc2hvdCntb7gAAAI8aVRYdFhNTDpjb20uYWRvYmUueG1wAAAAAAA8eDp4bXBtZXRhIHhtbG5zOng9ImFkb2JlOm5zOm1ldGEvIiB4OnhtcHRrPSJYTVAgQ29yZSA2LjAuMCI+CiAgIDxyZGY6UkRGIHhtbG5zOnJkZj0iaHR0cDovL3d3dy53My5vcmcvMTk5OS8wMi8yMi1yZGYtc3ludGF4LW5zIyI+CiAgICAgIDxyZGY6RGVzY3JpcHRpb24gcmRmOmFib3V0PSIiCiAgICAgICAgICAgIHhtbG5zOmV4aWY9Imh0dHA6Ly9ucy5hZG9iZS5jb20vZXhpZi8xLjAvIgogICAgICAgICAgICB4bWxuczp0aWZmPSJodHRwOi8vbnMuYWRvYmUuY29tL3RpZmYvMS4wLyI+CiAgICAgICAgIDxleGlmOlBpeGVsWURpbWVuc2lvbj42NjwvZXhpZjpQaXhlbFlEaW1lbnNpb24+CiAgICAgICAgIDxleGlmOlVzZXJDb21tZW50PlNjcmVlbnNob3Q8L2V4aWY6VXNlckNvbW1lbnQ+CiAgICAgICAgIDxleGlmOlBpeGVsWERpbWVuc2lvbj41MTU8L2V4aWY6UGl4ZWxYRGltZW5zaW9uPgogICAgICAgICA8dGlmZjpPcmllbnRhdGlvbj4xPC90aWZmOk9yaWVudGF0aW9uPgogICAgICA8L3JkZjpEZXNjcmlwdGlvbj4KICAgPC9yZGY6UkRGPgo8L3g6eG1wbWV0YT4KY9XVvwAAF45JREFUeAHtnQd8FNX2xw8JHaQIqECAQKgSBQSBAEGKNFGpTxAJTfTPE+uzPQWMiE9BEaUE6QoE5QmISJcSele6QAghAUILiJiQ0Hnnd5M7zO7OZnfZJGz8n8MnzMyd2/Y7+5lzz7nn3s2VnHL5FokIASEgBISAEBACPk3Az6d7J50TAkJACAgBISAEFAFR2PJFEAJCQAgIASGQAwiIws4BD0m6KASEgBAQAkJAFLZ8B4SAEBACQkAI5AACorBzwEOSLgoBISAEhIAQEIUt3wEhIASEgBAQAjmAgCjsHPCQpItCQAgIASEgBERhy3dACAgBISAEhEAOICAKOwc8JOmiEBACQkAICIHcgkAI3C0CkyaMv1tNS7tCQAgIAZcEXhzwkss82ZlBFHZ20pa2HAiEhYU5pEmCEBACQuBuE5g5c+bd7oJD+6KwHZBIQnYSyJMnD+XKlSs7m5S2hIAQEAIZErh1yzd/YkMUdoaPTW5mNYG8efOSv7+/KO2sBi31CwEh4BYBKOsbN264lTe7M4nCzm7i0p4NAShrWNkiQkAICAEhkDEBUdgZ85G72URA3OLZBFqaEQJCIEMCvuoOR6dlWVeGj05uCgEhIASEgBDwDQJiYfvGc5BeCAEhIASEwN+EQGLSFVp7MJFOXLhESanXqcr9hSk4oChVK12U8vjfeZCtKOy/yRdEPoYQEAJCQAjcXQInzqfQhz/tpXUx5+iGRaR5/tx+FFKxBIV3DKZyJQp53Nm/rcK+ePEiLV+2lHLxv06dO1NuCWzy+MvhrMCmjRvoxIkTVK1aNapVu46zbJIuBISAEPh/QQC6OXJzHI1cdpCSr153+pkvX79JUYcTafvo9fRmm+oU1iiQV8g4ze5wwy2FfSk5mZax8jOLH7dSomRJqlAhkCoEBppv+cT56VMn6ctRX6i+tGvXjgqLws605/LjvLm0ceNGeuaZbqKwM42qVCQEhEBOJABlPWD6Nlp58Kzb3YdSH7pwH208fJYm9K7vttJ2S2GfO3eORn7+mdPONGjYkMLDP6Li9xZ3mkduCAFvCWBt5Pfff08tW7ak0qVLU0pKivrLly8f3XPPPZbVJ/Ng8/Lly1S0KM8d+digbcqUKdS1a1cqVqyYZd8lUQgIAd8nMHNTnKWyLl+sANWvVIIK58tDpy9epi2x5+jPy9dsPhCUPMr3ahxok+7swi2FbS7cvfuzVOq++ygxMZHWrllDp9iS3bplC/3n46E0ctRX5qxyLgQyjcDNmzfp22+/pb/++osKFiyo6l2+fDnFxcWpTVeef/55S6W9aNEi/o6eojZt2tCDDz6Yaf3JjIquXr1K06dPp549e1KJEiUyo0qpQwgIgWwkcPz8Jfpi+UGbFv3Yxf3+EzWpT5OKNpZz8pXr9NFP+2jezhM2+VG+efVSbs1pe7ysq3XrNtTjuZ702utv0Nx58wnWNQQuUlgyIkIgKwisXLlSKevKlSsra9ncBtZNLliwwJyUI85btGhBGIjMnz8/R/RXOikEhIAtgaEL9jnMWf+jbjnqG2qrrFGqcL7c9GnXWlS1VGGbSpR7nOtxRzy2sM2V+vn70RPt2isLG+mJZ89SufLljSx4kf7++37avWsXnTl9mq5cvUIhDRtRo8aNKQ9vSWmWM2wF/frrr5QvfwFq+XhLSk5Kou07ttPO335TllPr1q15rryiuYhxjrKbt2ym6Oho5SqtV7ceoW8Zyc0bN2nLlk0Uc/gwnea+BZQrR1WqVqNHH33Uodg1toRW/PKLSm/OL1k/3p3rtx07aNv2bVSqVCl6rOljVJbLQxDstnXzZtq1e5dydbZr94QNE5XJxX/Hjx2j1VGrFbN8zOn++x+gWrVqUY2aNR1Kpqak0sYN6+nAgd/Vy7969RrUgl3G9nx1wehDh5jzDmWZludn1bBBCAVVqaxv2xzBaCtz3bt3D126dIlqsIXatGkzmzzmCzz/7du2cYBfbmrdpq35llfnZ86cof3796stTGEpWwk8Pnv27KGHH37Y6rZPplWvXp128PcIfd/M35mQkBCf7Kd0SggIAUcC127cos2x5x1utAkuY5N2k/P5pS/l8udjg0olKTox2SYP6kF9rpZ8eaWw0eIff/yhGsYcIZSeWfr16U0HDx4wJ9GCn36i/Pnz07fTZ9go4N17dtOwYUOV9RRYoQINHDhAKT9deNrUKTR+/ASqU7euTlLHDevX05DB7ztY99ryt8mcfpFw/Dh98MFgHkz87nAb5YYMCVcBdfomlDD6BilTtiwN//QTio+PU9f4b+yY0fTNtzN4jjQv9X++j01fvpk2lWbMnMWDgapG/oxO1q1dQ+++87ZDlvbtn6TBdgo7nt3ByGvuCwr+8MNsGvnFVzYxBRg8fcMMJ0+eZFP3uLFj6L1Bg+nppzvYpGMg8MGQQbSBBwNmKV3a9stovodBAzjh+WamwoYyg4SGhhL2HncmUVFRVKVKFSpQoICzLDbpiM04cOCAGrDlzp2bB0b3K4VfuLDtCPjPP/+k3bt3E9Lr8vcPEfIoh+9+mTJlqDEPQP38HAeI+H4dOXJEzbOj7nr16qk6zJ146qmnaNq0abRz505R2GYwci4EfJzAoVNJhKhve4lnN/n2WH+6ye/ceTuO04LdCTR/YCg9WLaIypovj799EVUP6gsOSMvjkCE9wSuFDUU2M3KGqiq0aVM1l2huKDU1lR5/vBU1a9Zcvdj2799HERHjlEL7hl9SH340zJxdnaPO/v37qjwtWrRUCnLunB/U9fjxETR56jSjzLH4eHr7rX+p69DQpvRM9+509coVWrZ0Ka1YkWYRG5nTT65fu0avvPKymnvHS/SlgS9TuYBydPhIDI0fN1Z5C/797js0acpUh8+DKt54/VXVFyhQRMfPnv09/XH+PL3/3r/5xXxJtdKlS1f2ChThe9+pvLMiZ1p+1vQuGQdY8qO+GKmu27CF2qFDR7rCn+fQ4WgqxRH5ZkHe1159mWB9Ym62W7dn6dz5czRrVqQaiEyZMonefuddo8jPPy9QyhrKtGOnzqx46tHiRQtpzZoo+vQ/H7PnI0TFJugCI4Z/opQ18r/+rzcpqFIQHWAFNHXqZJuBlM6PY35WlPfyXGzBAmlzzOZ7d3oOl3E8P2dITbsBi67zoYceon379ikPw8KFCzl6/Rl9y+kRg4AtHHthFsyHb9++ndq2bauWrOl7YPwbe3rAAt9p5NFy8uRJNUdubhN9njNnDuGeFpzDA9CjRw8qaXqWGOhiIIDgOAwEAgICdBE5CgEh4MME9p24YNk7RH9rwbrrruwiL1/y9jsx4UKKvm1zRH2ZrrBhCccfi6ejsbFsyf1XKSQs7erdu49N47iYGTnLxjULl24MK0ZY2bGxRxzymxMiZ82moMpBKglWFSzsmJjD5iwqDQlV2XodPuJzww3eqHETeoQtoRHDP7XJj4s5rPwRKAeZNHkq3cdKG4K+PVijBoX1fI5f/nvZBb7c0krEPP3XEyZR7Tpp649hWcFKRZ1QVjOmTDNc4ImJZ2nx4kV09GisasPVf8fijykFjHx9+/UzPBANGzVyKDp37hwjb8TXE5UyQSa46D8YMpiw9GrgwFeoYKGCBGv5ax4oQcLCelG//i+o8yZssf6jS2dWFMcJ9f3zpYEqHQOh5cuXqfOPhn1MoezyhwSzYmzNyuz/XujvYNXjfv36DWjxkrRyuM4MgRKDAoTV7My6Ll68uLJeoUgTEhLYq3OQ4G52JsfZw6KV9SOPPML9rk/XeCAHCz2Wv9dLecBXlj0p9pY2nj3agJLFFAVc2bC0oYxRXkehr1u3TqVBwTdv3lzl/4WnVGCRYy6+Ow8szYKBIxT2IZ6uEIVtJiPnQsB3CcQmphloznroz0ufp/dvSPUC7zWypPJyrg28DttKXNWHMo5+PKuaTGmjv/qShn4YTjNmTFfKGhb09JmR7A4vb8qVdmo1j1qN54khycnOP+zYceMNZY28+uVrDmqDi1crlQ4dOhnKGvkhNVj5WsmmTRtVMqx3rax1vspVqlLt9I1AtqS7YfU9ffx85ChDWSOtsmn+d+LESYayxr0gDpCCXLlyVR1d/Ve+wm2GHw8bppSHszIbN2xQt/A58rIrHvPN+KtVq7ZRBIoYEh190LCKm3F+nRdHDGwgGIBpWb9urTqFYmrcOFQnG2kBAWVt0rLy4sKFtFEslm5lJE2aNDGixKEc4ZlwJqtWrVK3oBwfe+wxNRgoUqQIezQ6UKFChQjfrbVr0xjY1wHl2o8HU3CNwxLHgA35Y2JiVFYMLnZxzAakEQ+08N3FEjTEYEAQsW7/0316YIAIeBEhIARyBoFKpQpl2NE6AcVslDUyj1h8kJJYaVuJq/pQxmOXONzbJdmKW7TwZ6Wwk5KTnFo+aADzrEuWLKYTbNWcO5douDdxz0qgJGDJmSW/hYsVbmgt5QMr6FOXRwR0QZxt9lKxYkV+4e60tCBRrpzdPL0f3Z6PsB+0ePoLVBjgwEU/nq1hWPnPPdtNReG//PIrPDCoiuYNORp3VJ2vXr2KVjdqYKSbT86cOU1VeTey+PTPjHuo00pOnz5lJMNKhVTgWAJXwXtGoSw60UrMmXVtbhYKNzIyUinEJUuWUKdOncy3jXNMu0CCg4ONNH2CKHTMV8MNbi/4KVB76xiWPwLyYGFDYHVDgUMwRw5rG6LTcA5LG54QLbDEIfqz6nQ5CgEh4LsEggOKZ9i5UxdTaRTvfKbXdkXzHPWKg6edlnFVHwp6rLB79eqt3MdBQUHK5Yw12D/8dzZ14/XZ9gJrfPb33xnJmDeFEsBcnrdy1vRCvccuSCijuvWLWFs19nn1Gt8LF/60v5Ut12HMFy/zsexmx6AEfPH3Bs8jP9Pttis1hZUEBBYfAuGspED6emXsVKelDruArQSR6FoQNQ8pUqSoTrprRyhJCCxXVwJucFVD4WI+Gu5te8HaZ10XrGp70ZuYQAnbC1zeVsFl5nznTQNJZ9/zJF4BYVbYuj/6s5rrk3MhIAR8k0C10vcQ5qitAs/Q44S/LlPEmjTPm6tPgHpQnyvxWGHrChG4FLV6NW3btpW++nIU1av7qM3yIAQ5QVnDevjkk+FUv0ED8udI3Pk8t+rsRabrdudoftle9MCVWKlSEL/IjyhlaNUOrCKIvSVtlTer0tryUrBWrVrTqlUrafTor1Rfsc1qm7btjDXIWJKFZWzN2cWNNfEZCQZJWj77bCQVdrIrmM6j2SI6+m4L5qch2oJ11Z9mzZopLggOg5WtFbAup+eZndWpXenmfLqsO0c94ENe7GJmJffxxkNmQV8hmrv5npwLASHgmwSwBCuEdzKLiraek36If5lr/quhysCG063TmPW091Sad8/+E6EeV0u6UMbjOWxzQ4MGDzGCnQYNeo8Quazll2XL1CmiqUN42QuUdWbK/Q/ctgixztte9u/bb5+krgM5shuCNd/2cuP6dbX2G+k6n32e7LoGLyyNioy87aFYu3aN0Txc3ZAodombuRsZTCeVgiobVytXrjDOnZ3opVtwy6fy9p9mSeLBUTwHx2WX6B3ArCxeqz7AAoZrHAIlDxe1WTBNoZWx9iSY75/lteQQZx4Yc16rc8xXmwUDP/s/+/l47aLXn9VcXs6FgBDwXQLhHYKpcF5r3VYwn7/2hqsjrq0E5VGPO+KVwkbQ1ltvv6PaiY+PU25c3agOrNnDUeVQhBC4sVekKwxEVet0XcaTI359C1HJkHkc4XwkJi3qPOVSCk2aOIE+/3yEZXXd0t3KWB+uBxU6Y+TMGYbl3ZmXZmW3gA+C3RAMpiU19bI+pUIFCxvnYWG91Tlc/Njn3V5pQwkgOhzyAA9uMHCCYJriAG9CYha0Z55iaMwBXFrG8VI3Pf96iJn17hWmosr1ffMRbe7YsZ128ZrizBJYo1Bw1/k7BFeyOwKl6SzoEOUxTw1BcJjZckf/jx49qu7d6Tam6Kt2dyPaXFvsqlIn/+lBApaniQgBIZBzCOAnMvGrW94Iyrv7U5vWQwMPWm//5FO0ipeqbN68iebwMi+s54VF3ZA3IEHw1mHeSaz9E22NuWsdYIMmhn00lPq/8IJlhLk7XXhxwADlkseLtudz3Tkat4yxZAvKHO56e3m4dm21SQhc9uHhQ2jJ0sW8RrwsK/zDhqu+d5++ToPS7OvLzOtjx4+pdd6Yl0a0Ojbz0BuXQIG0aNnCaK48u7lffe11GsMuc3yWrVu3UJ1H6tItnuvFlAMGRIhox9ItyCucF2uJkd6vXx812CnLUdJxHLyG3eSwNG46b/ACQdBfSEgj9UyxPGxV+iALnBEUqKcVVGbTf7v5eWMjFzzjqLXrTXe8O8XPeOIzYe20jrZ2VSPyYQ7bSmFiS1B8L+GKxg9wINAQA0xEemNwAtc0lnvdqWAzFOx7Dq/AxIkTVf2w6mHRg2GXLl2M5Vu6j+AqLvE7JS7lhMDdIxDWKJA2Rp+llYfSvHO6JzFnklXQGbx67BEnXNvL49XvUz+xaZ/u7NpjC9sqavj9QYMM1/jQoeHKjdqT1/tiLhaClxReuNgRas7cH+lp3hAEgmVZ27ZuU+d+uZx3xR+7qVtIzZrBNGZMhDGvC2UEZdH92R4cbT3wdgkGZhbs7PXmm2+pvAjomv/jPNU/rKPGuuMB/3zJnJ0DjW67Muwjv3PxPIYz0QFK7gYTYXMUKGrwAhus4cY5gvU+HDqM3Sq2bT3b4zkaw0vgAgLKqajmZUuXqHLgAAVfqlRJo2tQCLO+m82R051VGgYz+NxQ1nqAYGTmk0+Gj+AfzGirktAH/EGpjxkboTbBwQ39+VQmdX2bk07LjCOWR6EtbE9qDurSPPTR3BbyP/lkmlfBnI5zRJz37dtXbWCCpYJYS414AAR/IZiyV69eNkWs6tcZrO6BNeqHi1sPBNAGlqjBAteDVrS3LH3qCOu1RYSAEMh5BPBantCnPoU/ZeseP596VQWdjYs6TBH8h2styg3O+T35aU2UzZWcchnKP8vkPAdxnTx5Sr0IsYmHFlgW+fPl5wjnMjrJq2PCiQS2aJLZ3VnFo6VIcAWjj6U50to+QMmrDnlRGFbeSd4wJImju6FMi997r8vaEAkex9MSxYoWV0ytFImuBC7whIQTar/2QLYudTS5vm8+wq0edzSWyrA1DkWUmTJpwnje3GWgmlPOqL9oc+/evWrTEQSh9enTJ9O6AYUKlzS8GdiBzFU/PG0YShnTFhi0wVVurn/NmjVqS1JY+B07pg1iPa1f8gsBIZC5BPD+xVRZREQEvTjA1nhz1RJ+vWso/yLX5qPnLaPHEQ0eUrEEhXcMdtsNbm7Ta5e4uTKr8xL8EsSfvVSqVMk+yavrsgHWS5tcVYp5ePsNVFyVyer7eKnrHxNxt61CvLQNHgd3BF4S84+0ZFSmQMEClj86klGZrLiH+V1sOgIrGwrWPtL6TtuEIrUPFLvTuqzKwdJ3Vj+Wn2EA0r59e6uikiYEhEAOI4C56CnPN1A/5IG9wbHdKHYww6YowQFFeelWUbeiwZ197CxX2M4alnQh4CkBzEtjntfdKQZP68/u/NgFrVWrVg5TC9ndD2lPCAiBzCWAJVrYF9zV3uCetioK21Nikv+uEkAw499FnP1U6N/l88nnEAJCIHMJOI/0ytx2pDYhIASEgBAQAkLACwKisL2AJ0WFgBAQAkJACGQXAVHY2UVa2hECQkAICAEh4AUBUdhewJOiQkAICAEhIASyi4Ao7OwiLe0IASEgBISAEPCCgChsL+BJUSEgBISAEBAC2UVAFHZ2kZZ2hIAQEAJCQAh4QUDWYXsBT4p6TwDb/4kIASEgBISAawJZvpe46y5IDiEgBISAEBACQsAVAXGJuyIk94WAEBACQkAI+AABUdg+8BCkC0JACAgBISAEXBEQhe2KkNwXAkJACAgBIeADBERh+8BDkC4IASEgBISAEHBFQBS2K0JyXwgIASEgBISADxAQhe0DD0G6IASEgBAQAkLAFQFR2K4IyX0hIASEgBAQAj5AQBS2DzwE6YIQEAJCQAgIAVcE/gfykz17BMosuQAAAABJRU5ErkJggg==" alt="Screenshot of the test recorder interface showing the random seed configuration field where users can set a seed value to ensure reproducible test results for applications using random number generation" width="100%" style="display: block; margin: auto;" /></p>
+<p>If your test script has already been created, you can set the random
+seed by editing the test script so that the <code>AppDriver$new()</code>
+call has a value for <code>seed</code>. Moreover, if you need these
+tests to pass on multiple versions of R with different
+<code>RNGkind()</code> defaults (e.g., 3.5 and 3.6), you may want to set
+a fixed <code>RNGkind()</code> across your tests (perhaps via
+<code>RNGversion(&quot;3.5.0&quot;)</code>). However, using a
+<code>AppDriver$new(variant=)</code> value that contains the R version
+can also remedy this situation.</p>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" tabindex="-1"></a>app <span class="ot">&lt;-</span> AppDriver<span class="sc">$</span><span class="fu">new</span>(<span class="at">seed =</span> <span class="dv">4323</span>)</span></code></pre></div>
+<p>In many cases, instead of setting the random seed, it is more elegant
+to use an <a href="zzz-faq.html#can-i-modify-the-input-and-output-values-that-are-recorded-in-snapshots">output
+preprocessor</a>.</p>
+</div>
+</div>
+<div id="widgets" class="section level2">
+<h2>Widgets</h2>
+<div id="tabs" class="section level3">
+<h3>Tabs</h3>
+<p>With tabbed views, such as <code>tabsetPanel()</code> and
+<code>navbarPage()</code>, in order for <code>{shinytest2}</code> to
+keep track of which tab is currently selected, they must have an
+<code>id</code>. For example:</p>
+<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" tabindex="-1"></a><span class="fu">tabsetPanel</span>(<span class="at">id =</span> <span class="st">&quot;tabs&quot;</span>, ....)</span></code></pre></div>
+<p>or</p>
+<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" tabindex="-1"></a><span class="fu">navbarPage</span>(<span class="at">id =</span> <span class="st">&quot;tabs&quot;</span>, ....)</span></code></pre></div>
+</div>
+<div id="uploading-files" class="section level3">
+<h3>Uploading files</h3>
+<p>If you record a file upload event to a <code>fileInput</code>, the
+test script will have a line like this:</p>
+<div class="sourceCode" id="cb20"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" tabindex="-1"></a>app<span class="sc">$</span><span class="fu">uploadFile</span>(<span class="at">file1 =</span> <span class="st">&quot;mtcars.csv&quot;</span>)</span></code></pre></div>
+<p>Notice that the filename <code>&quot;mtcars.csv&quot;</code> appears in the
+script without a full file path. This is because the test recorder does
+not know where the file came from; it only knows the name of the
+file.</p>
+<p>Before you run the test script, you must copy the file to the
+<code>tests/testthat/</code> directory. See the
+<code>tests/testthat/</code> subdirectory of <a href="https://github.com/rstudio/shinytest2/tree/61d51d9e96640bfae3eeefa12c4b685099b584c8/tests/testthat/apps/upload">this
+app</a> for an example.</p>
+<p>After copying the file to that directory, run <code>test_app()</code>
+as usual.</p>
+</div>
+<div id="view-the-headless-browser" class="section level3">
+<h3>View the headless browser</h3>
+<p>As you step through the script, you can inspect the state of the
+application in a few different ways.</p>
+<p>The recommended way is to call <code>app$view()</code>. This will
+open a browser window in your default Chrome browser.</p>
+<p>Another way is to take a screenshot of your application. You can call
+<code>app$get_screenshot()</code> to take a screenshot of the
+application. This will display the screenshot as if it were a plot. (In
+RStudio, it will show in the Plots tab.)</p>
+<p>Using both methods, you can inspect the screenshot to see the state
+of the application.</p>
+</div>
+<div id="getting-input-output-and-export-values" class="section level3">
+<h3>Getting input, output, and export values</h3>
+<p>It can also be useful to get the current input, output, and export
+values.</p>
+<p>To fetch all values without incrementing the expectation counter, you
+can call <code>app$get_values()</code>. This returns a list, which you
+can inspect with the <code>str()</code> function. It may look something
+like this:</p>
+<div class="sourceCode" id="cb21"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1" tabindex="-1"></a>vals <span class="ot">&lt;-</span> app<span class="sc">$</span><span class="fu">get_values</span>()</span>
+<span id="cb21-2"><a href="#cb21-2" tabindex="-1"></a></span>
+<span id="cb21-3"><a href="#cb21-3" tabindex="-1"></a><span class="fu">str</span>(vals)</span>
+<span id="cb21-4"><a href="#cb21-4" tabindex="-1"></a><span class="co">#&gt; List of 3</span></span>
+<span id="cb21-5"><a href="#cb21-5" tabindex="-1"></a><span class="co">#&gt;  $ input :List of 4</span></span>
+<span id="cb21-6"><a href="#cb21-6" tabindex="-1"></a><span class="co">#&gt;   ..$ action    :Classes &#39;integer&#39;, &#39;shinyActionButtonValue&#39;  int 0</span></span>
+<span id="cb21-7"><a href="#cb21-7" tabindex="-1"></a><span class="co">#&gt;   ..$ checkbox  : logi TRUE</span></span>
+<span id="cb21-8"><a href="#cb21-8" tabindex="-1"></a><span class="co">#&gt;   ..$ check_group: chr &quot;1&quot;</span></span>
+<span id="cb21-9"><a href="#cb21-9" tabindex="-1"></a><span class="co">#&gt;   ..$ text      : chr &quot;Enter text...&quot;</span></span>
+<span id="cb21-10"><a href="#cb21-10" tabindex="-1"></a><span class="co">#&gt;  $ output:List of 12</span></span>
+<span id="cb21-11"><a href="#cb21-11" tabindex="-1"></a><span class="co">#&gt;   ..$ action_out    : chr &quot;[1] 0\nattr(,\&quot;class\&quot;)\n[1] \&quot;integer\&quot;                #&gt; \&quot;shinyActionButtonValue\&quot;&quot;</span></span>
+<span id="cb21-12"><a href="#cb21-12" tabindex="-1"></a><span class="co">#&gt;   ..$ checkbox_out  : chr &quot;[1] TRUE&quot;</span></span>
+<span id="cb21-13"><a href="#cb21-13" tabindex="-1"></a><span class="co">#&gt;   ..$ check_group_out: chr &quot;[1] \&quot;1\&quot;&quot;</span></span>
+<span id="cb21-14"><a href="#cb21-14" tabindex="-1"></a><span class="co">#&gt;   ..$ text_out      : chr &quot;[1] \&quot;Enter text...\&quot;&quot;</span></span>
+<span id="cb21-15"><a href="#cb21-15" tabindex="-1"></a><span class="co">#&gt;  $ export: Named list()</span></span></code></pre></div>
+<p>The values retrieved this way can be used for expectation-based
+testing. For example, we could retrieve the <code>checkbox_out</code>
+value and compare it to a known string:</p>
+<div class="sourceCode" id="cb22"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb22-1"><a href="#cb22-1" tabindex="-1"></a>vals <span class="ot">&lt;-</span> app<span class="sc">$</span><span class="fu">get_values</span>()</span>
+<span id="cb22-2"><a href="#cb22-2" tabindex="-1"></a><span class="fu">expect_identical</span>(vals<span class="sc">$</span>output<span class="sc">$</span>checkbox_out, <span class="st">&quot;[1] TRUE&quot;</span>)</span>
+<span id="cb22-3"><a href="#cb22-3" tabindex="-1"></a></span>
+<span id="cb22-4"><a href="#cb22-4" tabindex="-1"></a><span class="co"># Or in a single line:</span></span>
+<span id="cb22-5"><a href="#cb22-5" tabindex="-1"></a><span class="fu">expect_identical</span>(app<span class="sc">$</span><span class="fu">get_value</span>(<span class="at">output =</span> <span class="st">&quot;checkbox_out&quot;</span>), <span class="st">&quot;[1] TRUE&quot;</span>)</span></code></pre></div>
+</div>
+<div id="wait-for-value" class="section level3">
+<h3>Waiting for an <code>input</code> (or <code>output</code>)
+value</h3>
+<p>In most situations, when an <code>input</code> value is set,
+<code>app$set_inputs()</code> will wait up to 3 seconds (default) for
+the next output value to be sent from the server. If, however, you have
+an application that does not immediately send the value you are
+interested in, you will need to insert at
+<code>app$wait_for_value()</code> function call. This is readily useful
+for htmlwidgets or anything that involves javascript code to set
+<code>input</code> values. This method can also be used to determine
+when <code>input</code> (or <code>output</code>) values have been set
+after the initial output values have been set or for when reactivity is
+done in two or more stages.</p>
+<p>For example, when checking a checkbox that adds dynamic UI, such as
+the old faithful Shiny example, three round trips from the browser to
+the Shiny server will need to occur.</p>
+<ol style="list-style-type: decimal">
+<li>Checking the checkbox</li>
+<li>Putting the slider and plot placeholder into the app’s UI</li>
+<li>Once the slider is recognized by the browser, it will send
+information back to Shiny causing the plot to be rendered and placed in
+the browser</li>
+</ol>
+<p>If we were to only use <code>app$set_inputs(&quot;chkbx&quot;, TRUE)</code> and
+immediately take a snapshot, we would most likely miss the correct plot
+value.</p>
+<p>To dig into this further, we can look at this situation’s example
+code:</p>
+<p><strong><code>app.R</code>:</strong></p>
+<div class="sourceCode" id="cb23"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb23-1"><a href="#cb23-1" tabindex="-1"></a><span class="fu">library</span>(shiny)</span>
+<span id="cb23-2"><a href="#cb23-2" tabindex="-1"></a></span>
+<span id="cb23-3"><a href="#cb23-3" tabindex="-1"></a>ui <span class="ot">&lt;-</span> <span class="fu">fluidPage</span>(</span>
+<span id="cb23-4"><a href="#cb23-4" tabindex="-1"></a>  <span class="fu">checkboxInput</span>(<span class="st">&quot;chkbx&quot;</span>, <span class="st">&quot;Display Graph?&quot;</span>, <span class="cn">FALSE</span>),</span>
+<span id="cb23-5"><a href="#cb23-5" tabindex="-1"></a>  <span class="fu">uiOutput</span>(<span class="st">&quot;dynamic_output&quot;</span>)</span>
+<span id="cb23-6"><a href="#cb23-6" tabindex="-1"></a>)</span>
+<span id="cb23-7"><a href="#cb23-7" tabindex="-1"></a></span>
+<span id="cb23-8"><a href="#cb23-8" tabindex="-1"></a>server <span class="ot">&lt;-</span> <span class="cf">function</span>(input, output) {</span>
+<span id="cb23-9"><a href="#cb23-9" tabindex="-1"></a>  output<span class="sc">$</span>dynamic_output <span class="ot">&lt;-</span> <span class="fu">renderUI</span>({</span>
+<span id="cb23-10"><a href="#cb23-10" tabindex="-1"></a>    <span class="cf">if</span>(<span class="sc">!</span>input<span class="sc">$</span>chkbx) {</span>
+<span id="cb23-11"><a href="#cb23-11" tabindex="-1"></a>      <span class="fu">return</span>(<span class="cn">NULL</span>)</span>
+<span id="cb23-12"><a href="#cb23-12" tabindex="-1"></a>    }</span>
+<span id="cb23-13"><a href="#cb23-13" tabindex="-1"></a>    <span class="fu">tagList</span>(</span>
+<span id="cb23-14"><a href="#cb23-14" tabindex="-1"></a>      <span class="fu">sliderInput</span>(<span class="at">inputId =</span> <span class="st">&quot;bins&quot;</span>, <span class="at">label =</span> <span class="st">&quot;Number of bins:&quot;</span>, <span class="at">min =</span> <span class="dv">1</span>, <span class="at">max =</span> <span class="dv">50</span>, <span class="at">value =</span> <span class="dv">30</span>),</span>
+<span id="cb23-15"><a href="#cb23-15" tabindex="-1"></a>      <span class="fu">plotOutput</span>(<span class="at">outputId =</span> <span class="st">&quot;dist_plot&quot;</span>)</span>
+<span id="cb23-16"><a href="#cb23-16" tabindex="-1"></a>    )</span>
+<span id="cb23-17"><a href="#cb23-17" tabindex="-1"></a>  })</span>
+<span id="cb23-18"><a href="#cb23-18" tabindex="-1"></a></span>
+<span id="cb23-19"><a href="#cb23-19" tabindex="-1"></a>  <span class="co"># Will not execute until `input$bins` is available</span></span>
+<span id="cb23-20"><a href="#cb23-20" tabindex="-1"></a>  <span class="co"># `input$bins` is not available until `chkbx` is checked</span></span>
+<span id="cb23-21"><a href="#cb23-21" tabindex="-1"></a>  output<span class="sc">$</span>dist_plot <span class="ot">&lt;-</span> <span class="fu">renderPlot</span>({</span>
+<span id="cb23-22"><a href="#cb23-22" tabindex="-1"></a>    <span class="co"># artificially slow the plot</span></span>
+<span id="cb23-23"><a href="#cb23-23" tabindex="-1"></a>    <span class="fu">Sys.sleep</span>(<span class="dv">5</span>)</span>
+<span id="cb23-24"><a href="#cb23-24" tabindex="-1"></a></span>
+<span id="cb23-25"><a href="#cb23-25" tabindex="-1"></a>    x    <span class="ot">&lt;-</span> faithful<span class="sc">$</span>waiting</span>
+<span id="cb23-26"><a href="#cb23-26" tabindex="-1"></a>    bins <span class="ot">&lt;-</span> <span class="fu">seq</span>(<span class="fu">min</span>(x), <span class="fu">max</span>(x), <span class="at">length.out =</span> input<span class="sc">$</span>bins <span class="sc">+</span> <span class="dv">1</span>)</span>
+<span id="cb23-27"><a href="#cb23-27" tabindex="-1"></a>    <span class="fu">hist</span>(x, <span class="at">breaks =</span> bins, <span class="at">col =</span> <span class="st">&quot;#75AADB&quot;</span>, <span class="at">border =</span> <span class="st">&quot;white&quot;</span>,</span>
+<span id="cb23-28"><a href="#cb23-28" tabindex="-1"></a>         <span class="at">xlab =</span> <span class="st">&quot;Waiting time to next eruption (in mins)&quot;</span>,</span>
+<span id="cb23-29"><a href="#cb23-29" tabindex="-1"></a>         <span class="at">main =</span> <span class="st">&quot;Histogram of waiting times&quot;</span>)</span>
+<span id="cb23-30"><a href="#cb23-30" tabindex="-1"></a>  })</span>
+<span id="cb23-31"><a href="#cb23-31" tabindex="-1"></a>}</span>
+<span id="cb23-32"><a href="#cb23-32" tabindex="-1"></a><span class="fu">shinyApp</span>(<span class="at">ui =</span> ui, <span class="at">server =</span> server)</span></code></pre></div>
+<p>Naively, we could add <code>Sys.sleep()</code> function calls to slow
+down <code>{shinytest2}</code> testing to hope that the Shiny
+application is in a stable state.</p>
+<p><strong><code>./tests/testthat/test-use-sleep-bad.R</code>:</strong></p>
+<div class="sourceCode" id="cb24"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb24-1"><a href="#cb24-1" tabindex="-1"></a><span class="fu">test_that</span>(<span class="st">&quot;Sleeping can work to wait for an app to stabilize&quot;</span>, {</span>
+<span id="cb24-2"><a href="#cb24-2" tabindex="-1"></a>  app <span class="ot">&lt;-</span> AppDriver<span class="sc">$</span><span class="fu">new</span>()</span>
+<span id="cb24-3"><a href="#cb24-3" tabindex="-1"></a></span>
+<span id="cb24-4"><a href="#cb24-4" tabindex="-1"></a>  <span class="co"># Check the box to display the slider and plot</span></span>
+<span id="cb24-5"><a href="#cb24-5" tabindex="-1"></a>  app<span class="sc">$</span><span class="fu">set_inputs</span>(<span class="st">&#39;chkbx&#39;</span> <span class="ot">=</span> <span class="cn">TRUE</span>)</span>
+<span id="cb24-6"><a href="#cb24-6" tabindex="-1"></a>  <span class="co"># Hope that the plot appears within 7 seconds</span></span>
+<span id="cb24-7"><a href="#cb24-7" tabindex="-1"></a>  <span class="fu">Sys.sleep</span>(<span class="dv">7</span>)</span>
+<span id="cb24-8"><a href="#cb24-8" tabindex="-1"></a></span>
+<span id="cb24-9"><a href="#cb24-9" tabindex="-1"></a>  app<span class="sc">$</span><span class="fu">snapshot</span>()</span>
+<span id="cb24-10"><a href="#cb24-10" tabindex="-1"></a></span>
+<span id="cb24-11"><a href="#cb24-11" tabindex="-1"></a>  app<span class="sc">$</span><span class="fu">set_inputs</span>(<span class="at">bins =</span> <span class="dv">40</span>)</span>
+<span id="cb24-12"><a href="#cb24-12" tabindex="-1"></a>  <span class="co"># Hope the newer plot appears within 7 seconds</span></span>
+<span id="cb24-13"><a href="#cb24-13" tabindex="-1"></a>  <span class="fu">Sys.sleep</span>(<span class="dv">7</span>)</span>
+<span id="cb24-14"><a href="#cb24-14" tabindex="-1"></a></span>
+<span id="cb24-15"><a href="#cb24-15" tabindex="-1"></a>  app<span class="sc">$</span><span class="fu">expect_values</span>()</span>
+<span id="cb24-16"><a href="#cb24-16" tabindex="-1"></a>})</span></code></pre></div>
+<p>The above pattern will probably fail if executed on a slower machine.
+This pattern of <em>sleeping and hoping</em> should be replaced with
+<code>app$wait_for_idle()</code> or <code>app$wait_for_value()</code>.
+<code>app$wait_for_idle()</code> will wait for the whole application to
+be idle for 500ms (default). This method is more intuitive, generic, and
+is easier to code. <code>app$wait_for_value()</code> will wait for a
+specific input value to not be an <code>ignore</code>ed value. This
+method is very specific and requires more logic to code.</p>
+<p><strong><code>./tests/testthat/test-wait-good.R</code>:</strong></p>
+<div class="sourceCode" id="cb25"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb25-1"><a href="#cb25-1" tabindex="-1"></a><span class="fu">test_that</span>(<span class="st">&quot;Use $wait_for_idle() for app to stabilize&quot;</span>, {</span>
+<span id="cb25-2"><a href="#cb25-2" tabindex="-1"></a>  app <span class="ot">&lt;-</span> AppDriver<span class="sc">$</span><span class="fu">new</span>()</span>
+<span id="cb25-3"><a href="#cb25-3" tabindex="-1"></a></span>
+<span id="cb25-4"><a href="#cb25-4" tabindex="-1"></a>  <span class="co"># Check the box to display the slider and plot</span></span>
+<span id="cb25-5"><a href="#cb25-5" tabindex="-1"></a>  app<span class="sc">$</span><span class="fu">set_inputs</span>(<span class="at">chkbx =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb25-6"><a href="#cb25-6" tabindex="-1"></a></span>
+<span id="cb25-7"><a href="#cb25-7" tabindex="-1"></a>  <span class="co"># Wait until Shiny is not busy for 500ms</span></span>
+<span id="cb25-8"><a href="#cb25-8" tabindex="-1"></a>  app<span class="sc">$</span><span class="fu">wait_for_idle</span>(<span class="dv">500</span>)</span>
+<span id="cb25-9"><a href="#cb25-9" tabindex="-1"></a></span>
+<span id="cb25-10"><a href="#cb25-10" tabindex="-1"></a>  <span class="co"># Make expectation</span></span>
+<span id="cb25-11"><a href="#cb25-11" tabindex="-1"></a>  app<span class="sc">$</span><span class="fu">expect_values</span>()</span>
+<span id="cb25-12"><a href="#cb25-12" tabindex="-1"></a></span>
+<span id="cb25-13"><a href="#cb25-13" tabindex="-1"></a>  <span class="co"># Change slider value to 40</span></span>
+<span id="cb25-14"><a href="#cb25-14" tabindex="-1"></a>  app<span class="sc">$</span><span class="fu">set_inputs</span>(<span class="at">bins =</span> <span class="dv">40</span>, <span class="at">wait_ =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb25-15"><a href="#cb25-15" tabindex="-1"></a>  <span class="co"># Wait until Shiny is not busy for 500ms</span></span>
+<span id="cb25-16"><a href="#cb25-16" tabindex="-1"></a>  app<span class="sc">$</span><span class="fu">wait_for_idle</span>(<span class="dv">500</span>)</span>
+<span id="cb25-17"><a href="#cb25-17" tabindex="-1"></a></span>
+<span id="cb25-18"><a href="#cb25-18" tabindex="-1"></a>  <span class="co"># Make expectation</span></span>
+<span id="cb25-19"><a href="#cb25-19" tabindex="-1"></a>  app<span class="sc">$</span><span class="fu">expect_values</span>()</span>
+<span id="cb25-20"><a href="#cb25-20" tabindex="-1"></a>})</span>
+<span id="cb25-21"><a href="#cb25-21" tabindex="-1"></a></span>
+<span id="cb25-22"><a href="#cb25-22" tabindex="-1"></a><span class="fu">test_that</span>(<span class="st">&quot;Use $wait_for_value() for app to stabilize&quot;</span>, {</span>
+<span id="cb25-23"><a href="#cb25-23" tabindex="-1"></a>  app <span class="ot">&lt;-</span> AppDriver<span class="sc">$</span><span class="fu">new</span>()</span>
+<span id="cb25-24"><a href="#cb25-24" tabindex="-1"></a></span>
+<span id="cb25-25"><a href="#cb25-25" tabindex="-1"></a>  <span class="co"># Check the box to display the slider and plot</span></span>
+<span id="cb25-26"><a href="#cb25-26" tabindex="-1"></a>  app<span class="sc">$</span><span class="fu">set_inputs</span>(<span class="at">chkbx =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb25-27"><a href="#cb25-27" tabindex="-1"></a></span>
+<span id="cb25-28"><a href="#cb25-28" tabindex="-1"></a>  <span class="co"># Wait until `output$dist_plot` is not `NULL`</span></span>
+<span id="cb25-29"><a href="#cb25-29" tabindex="-1"></a>  <span class="co"># (Store the retrieved plot value for later comparison)</span></span>
+<span id="cb25-30"><a href="#cb25-30" tabindex="-1"></a>  first_plot_value <span class="ot">&lt;-</span> app<span class="sc">$</span><span class="fu">wait_for_value</span>(<span class="at">output =</span> <span class="st">&quot;dist_plot&quot;</span>, <span class="at">ignore =</span> <span class="fu">list</span>(<span class="cn">NULL</span>))</span>
+<span id="cb25-31"><a href="#cb25-31" tabindex="-1"></a></span>
+<span id="cb25-32"><a href="#cb25-32" tabindex="-1"></a>  <span class="co"># Make expectation</span></span>
+<span id="cb25-33"><a href="#cb25-33" tabindex="-1"></a>  app<span class="sc">$</span><span class="fu">expect_values</span>()</span>
+<span id="cb25-34"><a href="#cb25-34" tabindex="-1"></a></span>
+<span id="cb25-35"><a href="#cb25-35" tabindex="-1"></a>  <span class="co"># Change slider value to 40</span></span>
+<span id="cb25-36"><a href="#cb25-36" tabindex="-1"></a>  app<span class="sc">$</span><span class="fu">set_inputs</span>(<span class="at">bins =</span> <span class="dv">40</span>, <span class="at">wait_ =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb25-37"><a href="#cb25-37" tabindex="-1"></a>  <span class="co"># Wait until plot does not equal the plot with 30 bins</span></span>
+<span id="cb25-38"><a href="#cb25-38" tabindex="-1"></a>  app<span class="sc">$</span><span class="fu">wait_for_value</span>(<span class="at">output =</span> <span class="st">&quot;dist_plot&quot;</span>, <span class="at">ignore =</span> <span class="fu">list</span>(first_plot_value))</span>
+<span id="cb25-39"><a href="#cb25-39" tabindex="-1"></a></span>
+<span id="cb25-40"><a href="#cb25-40" tabindex="-1"></a>  app<span class="sc">$</span><span class="fu">expect_values</span>()</span>
+<span id="cb25-41"><a href="#cb25-41" tabindex="-1"></a>})</span></code></pre></div>
+</div>
+</div>
+<div id="dealing-with-dynamic-data" class="section level2">
+<h2>Dealing with dynamic data</h2>
+<p>If your application uses a data source that changes over time, then a
+snapshot taken yesterday may not match a snapshot taken today, even if
+the app itself hasn’t changed. Dynamic data inherently poses a challenge
+for snapshot-based testing.</p>
+<p>This problem can be avoided by detecting when the application is
+being tested, and in that case use a static data set instead. To do the
+detection, you can do something like the following:</p>
+<div class="sourceCode" id="cb26"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb26-1"><a href="#cb26-1" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">isTRUE</span>(<span class="fu">getOption</span>(<span class="st">&quot;shiny.testmode&quot;</span>))) {</span>
+<span id="cb26-2"><a href="#cb26-2" tabindex="-1"></a>  <span class="co"># Load static/dummy data here</span></span>
+<span id="cb26-3"><a href="#cb26-3" tabindex="-1"></a>} <span class="cf">else</span> {</span>
+<span id="cb26-4"><a href="#cb26-4" tabindex="-1"></a>  <span class="co"># Load normal dynamic data here</span></span>
+<span id="cb26-5"><a href="#cb26-5" tabindex="-1"></a>}</span></code></pre></div>
+</div>
+<div id="using-variant-to-expect-different-snapshots" class="section level2">
+<h2>Using <code>variant</code> to expect different snapshots</h2>
+<p>You can variants to deal with cases where the snapshot output varies
+and you want to capture and test the variations. Common use cases
+include variations for operating system, R version, or version of key
+dependency. Variants are an advanced feature.</p>
+<p>When you use them, you’ll need to carefully think about your testing
+strategy to ensure that all important variants are covered by automated
+tests, and ensure that you have a way to get snapshot changes out of
+your CI system and back into the repo.</p>
+<p>It is recommended to use
+<code>AppDriver$new(variant= platform_variant())</code> to capture the
+operating system and R version where the test is running. Variants are
+required when calling <code>$expect_screenshot()</code>. A
+<code>NULL</code> value may be used, but is not recommended for testing
+reproducibility.</p>
+<p>All <code>{shinytest2}</code> expectation methods eventually call <a href="https://testthat.r-lib.org/reference/expect_snapshot_file.html"><code>testthat::expect_snapshot_file()</code></a>
+to save the snapshot files. Snapshot expectations will only compare to
+their variant’s version of the snapshot file.</p>
+</div>
+<div id="limitations" class="section level2">
+<h2>Limitations</h2>
+<div id="inputs-without-input-bindings" class="section level3">
+<h3>Inputs without input bindings</h3>
+<p>Most input components in Shiny set their values by communicating
+through something called an <em>input binding</em>.
+<code>{shinytest2}</code> works well with <code>input</code> values that
+are set via input bindings.</p>
+<p>However, there are some components that set input values without
+using an input binding. These include some <a href="http://www.htmlwidgets.org/">htmlwidgets</a>, such as <a href="https://rstudio.github.io/DT/">DT</a> and <a href="https://github.com/plotly/plotly.R">plotly</a>, as well as Shiny’s
+built-in plot interactions with <code>renderPlot()</code>.</p>
+<p>To set these unbound inputs, the resulting test script code will look
+something like this:</p>
+<div class="sourceCode" id="cb27"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb27-1"><a href="#cb27-1" tabindex="-1"></a>app<span class="sc">$</span><span class="fu">set_inputs</span>(<span class="at">table_rows_selected =</span> <span class="dv">1</span>, <span class="at">allow_no_input_binding_ =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb27-2"><a href="#cb27-2" tabindex="-1"></a>app<span class="sc">$</span><span class="fu">set_inputs</span>(<span class="at">table_row_last_clicked =</span> <span class="dv">1</span>, <span class="at">allow_no_input_binding_ =</span> <span class="cn">TRUE</span>)</span></code></pre></div>
+<p>When the test script is replayed, the headless browser will set these
+inputs to the specified values and send them to the server running Shiny
+in R. However, the browser will not be able to tell the input object to
+do the exact same behaviors. For example, with DT, when a row is
+selected, the mouse click event in the browser triggers the DataTable to
+highlight the row in the browser and also set the input value for Shiny.
+When <code>{shinytest2}</code> plays the script, it can only do the
+latter part, setting the input value. The result is that when a
+screenshot is taken, it <strong>will not</strong> have highlighted rows.
+For components that have internal state that is updated in response to
+user interaction, that internal state will not be updated when the test
+script is played. In some cases, this may mean that when the script is
+played, the behavior when the script is played will not be the same as
+when a user actually interacts with the application.</p>
+<p>If the input component sets multiple input values (without bindings)
+in response to a single user event, it may make sense to coalesce them
+into a single <code>set_inputs</code> call, such as this:</p>
+<div class="sourceCode" id="cb28"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb28-1"><a href="#cb28-1" tabindex="-1"></a>app<span class="sc">$</span><span class="fu">set_inputs</span>(</span>
+<span id="cb28-2"><a href="#cb28-2" tabindex="-1"></a>  <span class="at">table_rows_selected =</span> <span class="dv">1</span>,</span>
+<span id="cb28-3"><a href="#cb28-3" tabindex="-1"></a>  <span class="at">table_row_last_clicked =</span> <span class="dv">1</span>,</span>
+<span id="cb28-4"><a href="#cb28-4" tabindex="-1"></a>  <span class="at">allow_no_input_binding_ =</span> <span class="cn">TRUE</span></span>
+<span id="cb28-5"><a href="#cb28-5" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+<div id="input-components-provided-as-variables" class="section level3">
+<h3>Input component(s) provided as variable(s)</h3>
+<p>In some cases there might be a need to provide the input components
+using the variables (not hard-coded). It’s possible as
+<code>$set_inputs()</code> uses <code>rlang::list2(...)</code> to
+process the input values. This function supports <code>!!!</code>, <a href="https://rlang.r-lib.org/reference/splice.html">the splicing
+operator</a>, so one can construct a list outside of set_inputs() and
+use it to set the input values.</p>
+<div class="sourceCode" id="cb29"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb29-1"><a href="#cb29-1" tabindex="-1"></a><span class="co"># helper function that wraps `set_inputs`, with  the default value for the &#39;dataset&#39; component</span></span>
+<span id="cb29-2"><a href="#cb29-2" tabindex="-1"></a>update_dataset <span class="ot">&lt;-</span> <span class="cf">function</span>(app, value, <span class="at">component_id =</span> <span class="st">&quot;dataset&quot;</span>) {</span>
+<span id="cb29-3"><a href="#cb29-3" tabindex="-1"></a>  checkmate<span class="sc">::</span><span class="fu">assert_choice</span>(value, <span class="fu">c</span>(<span class="st">&quot;rock&quot;</span>, <span class="st">&quot;pressure&quot;</span>, <span class="st">&quot;cars&quot;</span>))</span>
+<span id="cb29-4"><a href="#cb29-4" tabindex="-1"></a>  ml <span class="ot">&lt;-</span> rlang<span class="sc">::</span><span class="fu">list2</span>()</span>
+<span id="cb29-5"><a href="#cb29-5" tabindex="-1"></a>  ml[[component_id]] <span class="ot">&lt;-</span> value</span>
+<span id="cb29-6"><a href="#cb29-6" tabindex="-1"></a>  app<span class="sc">$</span><span class="fu">set_inputs</span>(<span class="sc">!!!</span>ml)</span>
+<span id="cb29-7"><a href="#cb29-7" tabindex="-1"></a>}</span>
+<span id="cb29-8"><a href="#cb29-8" tabindex="-1"></a></span>
+<span id="cb29-9"><a href="#cb29-9" tabindex="-1"></a>app_dir <span class="ot">&lt;-</span> <span class="fu">system.file</span>(<span class="st">&quot;examples/02_text&quot;</span>, <span class="at">package =</span> <span class="st">&quot;shiny&quot;</span>)</span>
+<span id="cb29-10"><a href="#cb29-10" tabindex="-1"></a>app <span class="ot">&lt;-</span> shinytest2<span class="sc">::</span>AppDriver<span class="sc">$</span><span class="fu">new</span>(app_dir)</span>
+<span id="cb29-11"><a href="#cb29-11" tabindex="-1"></a><span class="fu">update_dataset</span>(app, <span class="st">&quot;rock&quot;</span>)</span></code></pre></div>
+</div>
+</div>
+<div id="next" class="section level2">
+<h2>Next</h2>
+<p>Learn about using shinytest2 with <a href="use-ci.html">continuous
+integration</a>.</p>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
