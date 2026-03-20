@@ -523,7 +523,8 @@ server <- function(input, output, session) {
 
   # Lasso / box select → set selection
   observe({
-    ed <- event_data("plotly_selected", source = SEL_SOURCE)
+    ed <- tryCatch(event_data("plotly_selected", source = SEL_SOURCE),
+                    warning = function(w) NULL)
     if (is.null(ed) || nrow(ed) == 0) return()
     new_ids <- as.integer(ed$key)
     new_ids <- new_ids[!is.na(new_ids)]
@@ -532,7 +533,8 @@ server <- function(input, output, session) {
 
   # Single click → toggle point in/out of selection
   observe({
-    ed <- event_data("plotly_click", source = SEL_SOURCE)
+    ed <- tryCatch(event_data("plotly_click", source = SEL_SOURCE),
+                    warning = function(w) NULL)
     if (is.null(ed) || nrow(ed) == 0) return()
     clicked_id <- as.integer(ed$key[1])
     if (is.na(clicked_id)) return()
