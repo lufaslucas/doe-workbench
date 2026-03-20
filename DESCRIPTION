@@ -41,7 +41,9 @@ Imports:
     RColorBrewer,
     base64enc,
     digest,
-    openxlsx
+    here,
+    openxlsx,
+    pkgload
 Suggests:
     officedown,
     tinytex,
