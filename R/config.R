@@ -79,3 +79,31 @@ MODEL_TYPES <- c("OLS (lm)" = "lm")   # Extensible: add "WLS" = "wls", "GLM" = "
 
 # ── Read-Only Mode ──────────────────────────────────────────────────────
 READONLY_HASH_ALGO  <- "sha256"       # digest algorithm for password hashing
+
+# ── Build Info ──────────────────────────────────────────────────────────
+get_build_info <- function() {
+  # In dev mode (load_all), read live from git
+  pkg_root <- tryCatch(here::here(), error = function(e) NULL)
+  if (!is.null(pkg_root) && dir.exists(file.path(pkg_root, ".git"))) {
+    branch <- tryCatch(
+      trimws(system2("git", c("-C", pkg_root, "rev-parse", "--abbrev-ref", "HEAD"),
+                      stdout = TRUE, stderr = FALSE)),
+      error = function(e) "unknown")
+    commit <- tryCatch(
+      trimws(system2("git", c("-C", pkg_root, "log", "-1", "--format=%h"),
+                      stdout = TRUE, stderr = FALSE)),
+      error = function(e) "unknown")
+    date <- tryCatch(
+      trimws(system2("git", c("-C", pkg_root, "log", "-1", "--format=%ci"),
+                      stdout = TRUE, stderr = FALSE)),
+      error = function(e) "unknown")
+    return(paste0(branch, " @ ", commit, " (", substr(date, 1, 10), ")"))
+  }
+  # Installed mode: read baked-in file
+  info_file <- system.file("build_info.txt", package = "doe.workbench")
+  if (info_file != "" && file.exists(info_file)) {
+    return(trimws(readLines(info_file, n = 1, warn = FALSE)))
+  }
+  # Fallback: package version
+  paste0("v", utils::packageVersion("doe.workbench"))
+}

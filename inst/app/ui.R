@@ -16,6 +16,10 @@ ui <- navbarPage(
       actionButton("load_btn", "Load", class = "btn-sm",
                    icon = icon("upload"))
     ),
+    div(class = "build-info",
+      style = "position:fixed; top:4px; right:260px; font-size:11px; color:#888; z-index:1050;",
+      textOutput("build_info_text", inline = TRUE)
+    ),
     div(id = "readonly_banner", class = "readonly-banner", style = "display:none;",
       icon("lock"),
       span("Read-Only Session"),

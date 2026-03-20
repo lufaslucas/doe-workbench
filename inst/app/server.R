@@ -5,6 +5,9 @@
 
 server <- function(input, output, session) {
 
+  # ── Build Info ────────────────────────────────────────────────────────
+  output$build_info_text <- renderText(get_build_info())
+
   # ── Shared State ───────────────────────────────────────────────────────
   rv <- reactiveValues(
     # DATA LAYER (owned by: data_upload, data_generate, assign_roles)
