@@ -110,6 +110,9 @@ make_default_rv <- function() {
 
     # DESIGN LAYER
     design_metadata          = list(),
+    design_model_formula     = "",
+    design_alias_formula     = "",
+    alias_threshold          = ALIAS_CORR_THRESH,
     sim_data                 = NULL,
     formula_aliases          = list(),
     alias_labels             = list(),

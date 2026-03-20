@@ -53,6 +53,34 @@ clear_model_state <- function(rv) {
 }
 
 # ---------------------------------------------------------------------------
+# Design spec setters — centralise normalisation for Design formula state
+# ---------------------------------------------------------------------------
+set_design_model_formula <- function(rv, value) {
+  rv$design_model_formula <- trimws(value %||% "")
+  invisible(rv)
+}
+
+set_design_alias_formula <- function(rv, value) {
+  rv$design_alias_formula <- trimws(value %||% "")
+  invisible(rv)
+}
+
+set_alias_threshold <- function(rv, value) {
+  v <- as.numeric(value)
+  if (is.na(v) || v <= 0 || v > 1) v <- ALIAS_CORR_THRESH
+  rv$alias_threshold <- v
+  invisible(rv)
+}
+
+set_design_spec <- function(rv, model_formula = NULL, alias_formula = NULL,
+                            threshold = NULL) {
+  if (!is.null(model_formula)) set_design_model_formula(rv, model_formula)
+  if (!is.null(alias_formula)) set_design_alias_formula(rv, alias_formula)
+  if (!is.null(threshold))     set_alias_threshold(rv, threshold)
+  invisible(rv)
+}
+
+# ---------------------------------------------------------------------------
 # Custom theme: theme_minimal with facet panel outlines
 # ---------------------------------------------------------------------------
 theme_app <- function(...) {

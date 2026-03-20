@@ -86,8 +86,11 @@ server <- function(input, output, session) {
       vif_df        = rv$vif_df,
       excluded_obs  = rv$excluded_obs,
       prune_notes   = rv$prune_notes,
-      design_metadata = rv$design_metadata,
-      sim_data      = rv$sim_data,
+      design_metadata      = rv$design_metadata,
+      design_model_formula = rv$design_model_formula,
+      design_alias_formula = rv$design_alias_formula,
+      alias_threshold      = rv$alias_threshold,
+      sim_data             = rv$sim_data,
       # Formula/alias state (previously lost on save)
       formula_aliases   = rv$formula_aliases,
       alias_labels      = rv$alias_labels,
@@ -240,8 +243,11 @@ server <- function(input, output, session) {
     rv$vif_df        <- state$vif_df %||% data.frame()
     rv$excluded_obs  <- state$excluded_obs %||% list()
     rv$prune_notes   <- state$prune_notes %||% list()
-    rv$sim_data      <- state$sim_data
-    rv$design_metadata <- state$design_metadata %||% list()
+    rv$sim_data              <- state$sim_data
+    rv$design_metadata       <- state$design_metadata %||% list()
+    rv$design_model_formula  <- state$design_model_formula %||% ""
+    rv$design_alias_formula  <- state$design_alias_formula %||% ""
+    rv$alias_threshold       <- state$alias_threshold %||% ALIAS_CORR_THRESH
     # Formula/alias state (backward-compatible: defaults for old saves)
     rv$formula_aliases          <- state$formula_aliases %||% list()
     rv$alias_labels             <- state$alias_labels %||% list()
@@ -269,8 +275,9 @@ server <- function(input, output, session) {
         updateSelectInput(session, "cont_colour_theme", selected = state$settings$cont_colour_theme)
     }
 
-    # Sync module UI to loaded rv state (MC terms, methods, etc.)
+    # Sync module UIs to loaded rv state
     tryCatch(models_exports$sync_ui_from_rv(), error = function(e) NULL)
+    tryCatch(design_exports$sync_ui_from_rv(), error = function(e) NULL)
 
     removeModal()
     msg <- if (isTRUE(state$read_only)) "Session restored (read-only mode)."
@@ -373,8 +380,11 @@ server <- function(input, output, session) {
     clear_formula_state(rv)
     clear_model_state(rv)
     # Design layer
-    rv$design_metadata <- defs$design_metadata
-    rv$sim_data        <- defs$sim_data
+    rv$design_metadata       <- defs$design_metadata
+    rv$design_model_formula  <- defs$design_model_formula
+    rv$design_alias_formula  <- defs$design_alias_formula
+    rv$alias_threshold       <- defs$alias_threshold
+    rv$sim_data              <- defs$sim_data
     # UI layer
     rv$selected_obs    <- defs$selected_obs
   }

@@ -57,6 +57,108 @@ test_that("clear_formula_state resets formula and alias state while bumping gene
   expect_false(shiny::isolate(rv$skip_auto_formula))
 })
 
+test_that("make_default_rv includes Design spec fields with expected defaults", {
+  defs <- make_default_rv()
+
+  expect_true(all(c(
+    "design_model_formula", "design_alias_formula", "alias_threshold"
+  ) %in% names(defs)))
+
+  expect_equal(defs$design_model_formula, "")
+  expect_equal(defs$design_alias_formula, "")
+  expect_equal(defs$alias_threshold, ALIAS_CORR_THRESH)
+})
+
+test_that("set_design_model_formula trims whitespace and handles NULL", {
+  rv <- do.call(shiny::reactiveValues, make_default_rv())
+
+  shiny::isolate(set_design_model_formula(rv, "  A + B  "))
+  expect_equal(shiny::isolate(rv$design_model_formula), "A + B")
+
+  shiny::isolate(set_design_model_formula(rv, NULL))
+  expect_equal(shiny::isolate(rv$design_model_formula), "")
+})
+
+test_that("set_design_alias_formula trims whitespace and handles NULL", {
+  rv <- do.call(shiny::reactiveValues, make_default_rv())
+
+  shiny::isolate(set_design_alias_formula(rv, " A:B + C:D "))
+  expect_equal(shiny::isolate(rv$design_alias_formula), "A:B + C:D")
+
+  shiny::isolate(set_design_alias_formula(rv, NULL))
+  expect_equal(shiny::isolate(rv$design_alias_formula), "")
+})
+
+test_that("set_alias_threshold validates and defaults invalid values", {
+  rv <- do.call(shiny::reactiveValues, make_default_rv())
+
+  shiny::isolate(set_alias_threshold(rv, 0.95))
+  expect_equal(shiny::isolate(rv$alias_threshold), 0.95)
+
+  shiny::isolate(set_alias_threshold(rv, -0.5))
+  expect_equal(shiny::isolate(rv$alias_threshold), ALIAS_CORR_THRESH)
+
+  shiny::isolate(set_alias_threshold(rv, 1.5))
+  expect_equal(shiny::isolate(rv$alias_threshold), ALIAS_CORR_THRESH)
+
+  suppressWarnings(shiny::isolate(set_alias_threshold(rv, "invalid")))
+  expect_equal(shiny::isolate(rv$alias_threshold), ALIAS_CORR_THRESH)
+})
+
+test_that("set_design_spec sets multiple fields at once", {
+  rv <- do.call(shiny::reactiveValues, make_default_rv())
+
+  shiny::isolate(set_design_spec(rv,
+    model_formula = "A + B + A:B",
+    alias_formula = "A + B + C + A:B + A:C + B:C",
+    threshold = 0.90))
+
+  expect_equal(shiny::isolate(rv$design_model_formula), "A + B + A:B")
+  expect_equal(shiny::isolate(rv$design_alias_formula), "A + B + C + A:B + A:C + B:C")
+  expect_equal(shiny::isolate(rv$alias_threshold), 0.90)
+})
+
+test_that("reset clears Design spec to defaults via make_default_rv", {
+  rv <- do.call(shiny::reactiveValues, make_default_rv())
+
+  shiny::isolate({
+    set_design_spec(rv,
+      model_formula = "A + B",
+      alias_formula = "A + B + A:B",
+      threshold = 0.80)
+  })
+
+  # Simulate full reset
+  defs <- make_default_rv()
+  shiny::isolate({
+    for (nm in names(defs)) rv[[nm]] <- defs[[nm]]
+  })
+
+  expect_equal(shiny::isolate(rv$design_model_formula), "")
+  expect_equal(shiny::isolate(rv$design_alias_formula), "")
+  expect_equal(shiny::isolate(rv$alias_threshold), ALIAS_CORR_THRESH)
+})
+
+test_that("backward-compatible load uses defaults for missing Design spec fields", {
+  # Simulate an old save file without Design spec fields
+  old_state <- list(
+    data = data.frame(Y = 1:3, A = c("a","b","a")),
+    roles = list(Y = "Response", A = "Factor"),
+    formulas = c("Y ~ A" = "Y ~ A")
+  )
+
+  rv <- do.call(shiny::reactiveValues, make_default_rv())
+  shiny::isolate({
+    rv$design_model_formula <- old_state$design_model_formula %||% ""
+    rv$design_alias_formula <- old_state$design_alias_formula %||% ""
+    rv$alias_threshold      <- old_state$alias_threshold %||% ALIAS_CORR_THRESH
+  })
+
+  expect_equal(shiny::isolate(rv$design_model_formula), "")
+  expect_equal(shiny::isolate(rv$design_alias_formula), "")
+  expect_equal(shiny::isolate(rv$alias_threshold), ALIAS_CORR_THRESH)
+})
+
 test_that("clear_model_state resets fitted outputs and MC settings to defaults", {
   rv <- do.call(shiny::reactiveValues, make_default_rv())
 
