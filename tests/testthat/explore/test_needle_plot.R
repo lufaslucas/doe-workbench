@@ -5,8 +5,7 @@ library(testthat)
 library(ggplot2)
 library(plotly)
 
-pkg_root <- normalizePath(file.path(dirname(dirname(dirname(getwd())))))
-if (!dir.exists(file.path(pkg_root, "R"))) pkg_root <- getwd()
+pkg_root <- here::here()
 
 for (f in sort(list.files(file.path(pkg_root, "R"), pattern = "\\.R$", full.names = TRUE))) {
   if (grepl("^mod_", basename(f))) next
