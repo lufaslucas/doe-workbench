@@ -1,5 +1,99 @@
 # R/mod_explore.R — Explore tab module (UI + server)
 
+# ── Needle plot builder (testable, pure function) ────────────────────────────
+#' Build a needle plot ggplot object
+#'
+#' @param df Data frame with observations
+#' @param resp_col Response column name
+#' @param fac_order Character vector of factor columns for treatment ID
+#' @param sort_mode "factors" or "response"
+#' @param colour_vec Optional colour vector (same length as nrow(df)), or NULL
+#' @param dcol Default point colour (hex string)
+#' @param colour_label Label for colour legend, or NULL
+#' @param facet_var Facet variable name, or NULL
+#' @param facet_mode "wrap" or "grid"
+#' @return A ggplot object (not yet converted to plotly)
+build_needle_plot <- function(df, resp_col, fac_order,
+                              sort_mode = "factors",
+                              colour_vec = NULL,
+                              dcol = "#404040",
+                              colour_label = NULL,
+                              facet_var = NULL,
+                              facet_mode = "wrap",
+                              colour_scale = NULL) {
+  df$.trt_id <- apply(df[, fac_order, drop = FALSE], 1,
+                       function(r) paste(r, collapse = ":"))
+
+  grand_mean <- mean(df[[resp_col]], na.rm = TRUE)
+
+  if (sort_mode == "response") {
+    trt_order <- aggregate(df[[resp_col]],
+                            by = list(.trt_id = df$.trt_id), FUN = mean, na.rm = TRUE)
+    df$.trt_id <- factor(df$.trt_id,
+                          levels = trt_order$.trt_id[order(trt_order$x)])
+  } else {
+    df$.trt_id <- factor(df$.trt_id)
+  }
+
+  has_colour <- !is.null(colour_vec)
+  has_facet  <- !is.null(facet_var) && facet_var != "none" && facet_var %in% names(df)
+
+  # Compute group mean per treatment (and per facet panel if faceted)
+  # ave() naturally respects facet grouping
+  if (has_facet) {
+    group_key <- paste(df$.trt_id, df[[facet_var]], sep = "||")
+  } else {
+    group_key <- as.character(df$.trt_id)
+  }
+  df$.group_mean <- ave(df[[resp_col]], group_key, FUN = function(x) mean(x, na.rm = TRUE))
+
+  if (has_colour) {
+    df$.colour <- colour_vec
+    is_cont <- is.numeric(colour_vec)
+    if (!is_cont) df$.colour <- as.factor(df$.colour)
+  }
+
+  p <- ggplot(df, aes(x = .trt_id, y = .data[[resp_col]])) +
+    # Grand mean reference line
+    geom_hline(yintercept = grand_mean, colour = "grey40", linewidth = 0.8) +
+    # Group-mean needles (grand mean -> group mean)
+    geom_segment(aes(xend = .trt_id, y = grand_mean, yend = .group_mean),
+                 colour = dcol, linewidth = 1.5) +
+    # Group mean diamonds
+    stat_summary(fun = mean, geom = "point",
+                 shape = 18, size = 4, colour = dcol) +
+    # Individual needles (point -> group mean)
+    geom_segment(aes(xend = .trt_id, yend = .group_mean),
+                 colour = "grey70", linewidth = 0.5)
+
+  # Individual points
+  if (has_colour) {
+    p <- p + geom_point(aes(colour = .colour), size = 2.5, alpha = 0.8)
+    if (!is.null(colour_scale)) {
+      p <- p + colour_scale
+    }
+  } else {
+    p <- p + geom_point(colour = dcol, size = 2.5, alpha = 0.8)
+  }
+
+  if (has_facet) {
+    p <- apply_facets(p, facet_var = facet_var, mode = facet_mode, scales = "free_x")
+  }
+
+  p <- p +
+    annotate("text", x = levels(df$.trt_id)[1], y = grand_mean,
+             label = paste("mean =", round(grand_mean, 2)),
+             vjust = -0.5, hjust = 0, colour = "grey40", size = 3) +
+    labs(title = paste("Needle plot \u2014", resp_col),
+         x = paste(fac_order, collapse = " : "),
+         y = resp_col,
+         colour = colour_label) +
+    theme_app() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+  p
+}
+
 # ── UI ───────────────────────────────────────────────────────────────────────
 mod_explore_ui <- function(id) {
   ns <- NS(id)
@@ -534,6 +628,7 @@ mod_explore_server <- function(id, rv, colour_theme, role_selectors,
     })
 
     output$needle_plot <- renderPlotly({
+      tryCatch({
       req(rv$data, input$explore_response)
       req(length(factors_()) > 0 || length(blocks()) > 0)
       resp_col <- input$explore_response
@@ -545,108 +640,35 @@ mod_explore_server <- function(id, rv, colour_theme, role_selectors,
       fac_order <- input$needle_factor_order %||% c(factors_(), blocks())
       fac_order <- intersect(fac_order, names(df))
       if (length(fac_order) == 0) fac_order <- c(factors_(), blocks())
-      sort_mode <- input$needle_sort %||% "factors"
-
-      df$.trt_id <- apply(df[, fac_order, drop = FALSE], 1,
-                           function(r) paste(r, collapse = ":"))
-
-      grand_mean <- mean(df[[resp_col]], na.rm = TRUE)
-
-      # Always compute group means — needles extend to group mean, not raw point
-      trt_means <- aggregate(df[[resp_col]],
-                              by = list(.trt_id = df$.trt_id), FUN = mean, na.rm = TRUE)
-      names(trt_means)[2] <- ".group_mean"
-
-      if (sort_mode == "response") {
-        trt_order <- trt_means$.trt_id[order(trt_means$.group_mean)]
-        df$.trt_id <- factor(df$.trt_id, levels = trt_order)
-        trt_means$.trt_id <- factor(trt_means$.trt_id, levels = trt_order)
-      } else {
-        df$.trt_id <- factor(df$.trt_id)
-        trt_means$.trt_id <- factor(trt_means$.trt_id, levels = levels(df$.trt_id))
-      }
 
       cv <- explore_colour()
       colour_var <- input$explore_colour_by %||% "none"
-      has_colour <- !is.null(cv)
+      colour_label <- if (!is.null(cv)) {
+        if (colour_var == ".treatment") treatment_label() else colour_var
+      } else NULL
 
-      df$.grand_mean <- grand_mean
-      # Merge group mean onto df for tooltip access; needle uses trt_means directly
-      df <- merge(df, trt_means, by = ".trt_id", all.x = TRUE)
+      # Resolve colour scale for the plot
+      cs <- if (!is.null(cv)) {
+        if (is.numeric(cv)) cont_scale_colour()() else cat_scale_colour()()
+      } else NULL
 
-      # Grand mean reference line data — constrained to data range, not full axis
-      n_levels <- nlevels(trt_means$.trt_id)
-      ref_line_df <- data.frame(x = 1, xend = n_levels, y = grand_mean, yend = grand_mean)
-
-      dcol <- default_col()
-      if (has_colour) {
-        df$.colour <- cv
-        is_cont <- is.numeric(cv)
-        if (!is_cont) df$.colour <- as.factor(df$.colour)
-        p <- ggplot(df, aes(x = .trt_id, y = .data[[resp_col]])) +
-          # Grand mean reference line
-          geom_segment(data = ref_line_df,
-                       aes(x = x, xend = xend, y = y, yend = yend),
-                       colour = "grey40", linewidth = 0.8, inherit.aes = FALSE) +
-          # Group-mean needles (grand mean -> group mean)
-          geom_segment(data = trt_means,
-                       aes(x = .trt_id, xend = .trt_id,
-                           y = grand_mean, yend = .group_mean),
-                       colour = dcol, linewidth = 1.5) +
-          # Group mean markers (diamond)
-          geom_point(data = trt_means,
-                     aes(x = .trt_id, y = .group_mean),
-                     shape = 18, size = 4, colour = dcol, inherit.aes = FALSE) +
-          # Individual needles (data point -> group mean)
-          geom_segment(aes(x = .trt_id, xend = .trt_id,
-                           y = .group_mean, yend = .data[[resp_col]]),
-                       colour = "grey70", linewidth = 0.5) +
-          geom_point(aes(colour = .colour), size = 2.5, alpha = 0.8)
-        if (is_cont) {
-          p <- p + cont_scale_colour()()
-        } else {
-          p <- p + cat_scale_colour()()
-        }
-      } else {
-        p <- ggplot(df, aes(x = .trt_id, y = .data[[resp_col]])) +
-          geom_segment(data = ref_line_df,
-                       aes(x = x, xend = xend, y = y, yend = yend),
-                       colour = "grey40", linewidth = 0.8, inherit.aes = FALSE) +
-          geom_segment(data = trt_means,
-                       aes(x = .trt_id, xend = .trt_id,
-                           y = grand_mean, yend = .group_mean),
-                       colour = dcol, linewidth = 1.5) +
-          # Group mean markers (diamond)
-          geom_point(data = trt_means,
-                     aes(x = .trt_id, y = .group_mean),
-                     shape = 18, size = 4, colour = dcol, inherit.aes = FALSE) +
-          # Individual needles (data point -> group mean)
-          geom_segment(aes(x = .trt_id, xend = .trt_id,
-                           y = .group_mean, yend = .data[[resp_col]]),
-                       colour = "grey70", linewidth = 0.5) +
-          geom_point(colour = dcol, size = 2.5, alpha = 0.8)
-      }
-
-      facet_var  <- input$needle_facet
-      facet_mode <- input$needle_facet_mode %||% "wrap"
-      has_facet  <- !is.null(facet_var) && facet_var != "none" && facet_var %in% names(df)
-      if (has_facet) {
-        p <- apply_facets(p, facet_var = facet_var, mode = facet_mode, scales = "free_x")
-      }
-
-      p <- p +
-        annotate("text", x = 1, y = grand_mean, label = paste("mean =", round(grand_mean, 2)),
-                 vjust = -0.5, hjust = 0, colour = "grey40", size = 3) +
-        labs(title = paste("Needle plot \u2014", resp_col),
-             x = paste(fac_order, collapse = " : "),
-             y = resp_col,
-             colour = if (has_colour) {
-               cb <- input$explore_colour_by %||% "none"
-               if (cb == ".treatment") treatment_label() else cb
-             } else NULL) +
-        theme_app() +
-        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+      p <- build_needle_plot(
+        df           = df,
+        resp_col     = resp_col,
+        fac_order    = fac_order,
+        sort_mode    = input$needle_sort %||% "factors",
+        colour_vec   = cv,
+        dcol         = default_col(),
+        colour_label = colour_label,
+        facet_var    = input$needle_facet,
+        facet_mode   = input$needle_facet_mode %||% "wrap",
+        colour_scale = cs
+      )
       ggplotly(p)
+      }, error = function(e) {
+        showNotification(paste("Needle plot error:", e$message), type = "error", duration = 10)
+        plotly_empty() %>% layout(title = list(text = "Error rendering plot", font = list(color = "red")))
+      })
     })
 
     # ── Parallel Plot ──────────────────────────────────────────────────────

@@ -163,7 +163,7 @@ mod_report_server <- function(id, rv, role_selectors, active_models,
         withProgress(message="Rendering report\u2026", value=0.3, {
           tryCatch({
             rmarkdown::render(
-              input         = system.file("rmd", "report_template.Rmd", package = "DoEWorkbench"),
+              input         = system.file("rmd", "report_template.Rmd", package = "doe.workbench"),
               output_format = fmt,
               output_file   = file,
               params        = params_list,

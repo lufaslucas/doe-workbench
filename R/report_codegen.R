@@ -7,7 +7,7 @@
 codegen_data_setup <- function(rv) {
   lines <- character()
   lines <- c(lines, "# ── Data Setup ──")
-  lines <- c(lines, "library(DoEWorkbench)")
+  lines <- c(lines, "library(doe.workbench)")
   lines <- c(lines, "")
 
   # Dataset embedding (inline for small, CSV reference for large)
@@ -140,7 +140,7 @@ codegen_mc <- function(formula_str, spec, method, alpha) {
 # ---------------------------------------------------------------------------
 codegen_header <- function() {
   sha <- tryCatch(
-    system2("git", c("-C", system.file(package = "DoEWorkbench"),
+    system2("git", c("-C", system.file(package = "doe.workbench"),
                      "rev-parse", "--short", "HEAD"),
             stdout = TRUE, stderr = FALSE),
     error = function(e) "unknown"
@@ -148,10 +148,10 @@ codegen_header <- function() {
   paste0(
     '# DoE Workbench — Reproducible Analysis\n',
     '# Generated: ', format(Sys.time(), "%Y-%m-%d %H:%M:%S"), '\n',
-    '# Package version: ', utils::packageVersion("DoEWorkbench"), '\n',
+    '# Package version: ', utils::packageVersion("doe.workbench"), '\n',
     '# Git commit: ', sha, '\n',
     '# \n',
-    '# To reproduce: install DoEWorkbench at the above commit,\n',
+    '# To reproduce: install doe.workbench at the above commit,\n',
     '# then run the code blocks below. Always reconfirm results\n',
     '# against the current package version.\n'
   )
