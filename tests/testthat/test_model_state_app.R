@@ -1,8 +1,6 @@
 library(testthat)
 
-pkg_root <- normalizePath(file.path(dirname(dirname(getwd()))))
-if (!dir.exists(file.path(pkg_root, "R"))) pkg_root <- getwd()
-app_dir <- file.path(pkg_root, "inst", "app")
+app_dir <- system.file("app", package = "doe.workbench")
 
 can_run_shinytest2 <- function() {
   tryCatch({

@@ -17,31 +17,13 @@
 
 library(testthat)
 
-# ---------------------------------------------------------------------------
-# Load package helper functions
-# ---------------------------------------------------------------------------
-pkg_root <- normalizePath(file.path(dirname(dirname(getwd()))))
-r_dir    <- file.path(pkg_root, "R")
-if (!dir.exists(r_dir)) { pkg_root <- getwd(); r_dir <- file.path(pkg_root, "R") }
-
-suppressPackageStartupMessages({
-  library(car)
-  library(emmeans)
-  library(lmtest)
-})
-
-for (f in sort(list.files(r_dir, pattern = "\\.R$", full.names = TRUE))) {
-  if (grepl("^mod_|^ui_helpers", basename(f))) next
-  tryCatch(source(f, local = FALSE), error = function(e) NULL)
-}
-
 
 # ============================================================================
 # Setup helpers
 # ============================================================================
 
 setup_fuel_economy <- function() {
-  csv_path <- file.path(pkg_root, "inst", "extdata", "fuel_economy.csv")
+  csv_path <- system.file("extdata", "fuel_economy.csv", package = "doe.workbench")
   df <- read.csv(csv_path, check.names = FALSE)
   names(df) <- gsub(" ", "_", names(df))
 
@@ -63,7 +45,7 @@ setup_fuel_economy <- function() {
 }
 
 load_jmp_diagnostics <- function() {
-  csv_path <- file.path(pkg_root, "inst", "extdata", "fuel_economy_jmp_full.csv")
+  csv_path <- system.file("extdata", "fuel_economy_jmp_full.csv", package = "doe.workbench")
   read.csv(csv_path, check.names = FALSE)
 }
 

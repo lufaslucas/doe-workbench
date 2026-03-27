@@ -1,19 +1,7 @@
 # tests/testthat/explore/test_needle_plot.R
 # TDD: verify needle plot renders with example data
 
-library(testthat)
-library(ggplot2)
-library(plotly)
-
-pkg_root <- here::here()
-
-for (f in sort(list.files(file.path(pkg_root, "R"), pattern = "\\.R$", full.names = TRUE))) {
-  if (grepl("^mod_", basename(f))) next
-  tryCatch(source(f, local = FALSE), error = function(e) NULL)
-}
-source(file.path(pkg_root, "R", "mod_explore.R"), local = FALSE)
-
-datasets_dir <- file.path(pkg_root, "tests", "datasets")
+datasets_dir <- test_path("datasets")
 
 test_that("needle plot builds from RCBD data", {
   df <- read.csv(file.path(datasets_dir, "rcbd.csv"), stringsAsFactors = FALSE)

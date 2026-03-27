@@ -1,15 +1,4 @@
-library(testthat)
-
-pkg_root <- normalizePath(file.path(dirname(dirname(getwd()))))
-r_dir    <- file.path(pkg_root, "R")
-if (!dir.exists(r_dir)) { pkg_root <- getwd(); r_dir <- file.path(pkg_root, "R") }
-
-# Source config.R first (defines constants used by app_state.R and utils.R)
-tryCatch(source(file.path(r_dir, "config.R"), local = FALSE), error = function(e) NULL)
-for (f in sort(list.files(r_dir, pattern = "\\.R$", full.names = TRUE))) {
-  if (grepl("^mod_|^ui_helpers|^config\\.R$", basename(f))) next
-  tryCatch(source(f, local = FALSE), error = function(e) NULL)
-}
+# tests/testthat/test_state_management.R
 
 test_that("make_default_rv includes phase-one state fields with expected defaults", {
   defs <- make_default_rv()

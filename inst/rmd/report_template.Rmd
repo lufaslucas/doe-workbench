@@ -322,7 +322,7 @@ if (length(params$selected_models) > 0) {
 
 # 7. Reproducible Code {.tabset}
 
-This section contains R code to reproduce the analysis outputs in this report. Copy and paste into an R session with the DoEWorkbench package installed.
+This section contains R code to reproduce the analysis outputs in this report. Copy and paste into an R session with the doe.workbench package installed.
 
 ```{r repro-code, results='asis', echo=FALSE}
 if (!is.null(params$repro_code) && nchar(params$repro_code) > 0) {

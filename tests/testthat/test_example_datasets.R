@@ -1,15 +1,7 @@
 # tests/testthat/test_example_datasets.R
 # TDD: verify example datasets can be loaded into the system
 
-library(testthat)
-
-pkg_root <- normalizePath(file.path(dirname(dirname(getwd()))))
-if (!dir.exists(file.path(pkg_root, "R"))) pkg_root <- getwd()
-
-source(file.path(pkg_root, "R", "config.R"), local = FALSE)
-source(file.path(pkg_root, "R", "utils.R"),  local = FALSE)
-
-datasets_dir <- file.path(pkg_root, "tests", "datasets")
+datasets_dir <- test_path("datasets")
 
 test_that("CCD dataset loads into the system", {
   path <- file.path(datasets_dir, "ccd.csv")
