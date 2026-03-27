@@ -1,0 +1,17 @@
+"Block","A","B","RunOrder","Temp_C","Yield","Purity"
+"B1","Low","Control",1,21.2,50.13,78.96
+"B1","High","Treatment",2,22.4,65.57,87.17
+"B1","Low","Treatment",3,21.6,56.02,83.27
+"B1","High","Control",4,23.9,59.77,81.21
+"B2","High","Control",5,22.8,58.7,82.97
+"B2","High","Treatment",6,24,68.65,82.75
+"B2","Low","Treatment",7,23.8,60.69,84.98
+"B2","Low","Control",8,23.9,52.81,80.91
+"B3","High","Treatment",9,23.7,64.16,86.15
+"B3","Low","Treatment",10,24.3,56.14,82.54
+"B3","High","Control",11,23,56.14,81.7
+"B3","Low","Control",12,24,47.98,78.9
+"B4","High","Treatment",13,23.8,67.14,88.73
+"B4","Low","Control",14,25.6,52.81,80.18
+"B4","Low","Treatment",15,25.6,56.46,79.02
+"B4","High","Control",16,24.7,55.15,83.99
