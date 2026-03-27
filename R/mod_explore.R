@@ -81,7 +81,8 @@ build_needle_plot <- function(df, resp_col, fac_order,
   }
 
   p <- p +
-    annotate("text", x = 1, y = grand_mean, label = paste("mean =", round(grand_mean, 2)),
+    annotate("text", x = levels(df$.trt_id)[1], y = grand_mean,
+             label = paste("mean =", round(grand_mean, 2)),
              vjust = -0.5, hjust = 0, colour = "grey40", size = 3) +
     labs(title = paste("Needle plot \u2014", resp_col),
          x = paste(fac_order, collapse = " : "),
@@ -627,6 +628,7 @@ mod_explore_server <- function(id, rv, colour_theme, role_selectors,
     })
 
     output$needle_plot <- renderPlotly({
+      tryCatch({
       req(rv$data, input$explore_response)
       req(length(factors_()) > 0 || length(blocks()) > 0)
       resp_col <- input$explore_response
@@ -663,6 +665,10 @@ mod_explore_server <- function(id, rv, colour_theme, role_selectors,
         colour_scale = cs
       )
       ggplotly(p)
+      }, error = function(e) {
+        showNotification(paste("Needle plot error:", e$message), type = "error", duration = 10)
+        plotly_empty() %>% layout(title = list(text = "Error rendering plot", font = list(color = "red")))
+      })
     })
 
     # ── Parallel Plot ──────────────────────────────────────────────────────

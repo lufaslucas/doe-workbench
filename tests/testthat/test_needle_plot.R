@@ -116,3 +116,37 @@ test_that("zero-variance response does not error", {
   built <- ggplot_build(p)
   expect_true(length(built$data) > 0)
 })
+
+test_that("needle plot with 3+ factors does not crash (discrete scale)", {
+  df <- read.csv(file.path(datasets_dir, "rcbd.csv"), stringsAsFactors = FALSE)
+  df <- stamp_row_ids(df)
+
+  # Include Block as a factor — reproduces the "discrete value on continuous scale" crash
+  p <- build_needle_plot(df = df, resp_col = "Yield",
+                          fac_order = c("A", "B", "Block"),
+                          dcol = "#404040")
+
+  expect_s3_class(p, "ggplot")
+  built <- ggplot_build(p)
+  expect_true(length(built$data) > 0)
+
+  # Also test ggplotly conversion doesn't crash
+  pl <- ggplotly(p)
+  expect_s3_class(pl, "plotly")
+})
+
+test_that("needle plot with facet + 3 factors does not crash", {
+  df <- read.csv(file.path(datasets_dir, "rcbd.csv"), stringsAsFactors = FALSE)
+  df <- stamp_row_ids(df)
+
+  p <- build_needle_plot(df = df, resp_col = "Yield",
+                          fac_order = c("A", "B", "Block"),
+                          dcol = "#404040",
+                          facet_var = "Block")
+
+  expect_s3_class(p, "ggplot")
+  built <- ggplot_build(p)
+  expect_true(length(built$data) > 0)
+  pl <- ggplotly(p)
+  expect_s3_class(pl, "plotly")
+})
